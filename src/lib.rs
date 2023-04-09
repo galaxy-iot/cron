@@ -333,6 +333,103 @@ impl DaysOfWeek {
     }
 }
 
+/// A bit-mask of all seconds in a minute set in a cron expression.
+#[derive(Debug, Default, PartialEq, Eq, Hash, Clone, Copy)]
+struct Seconds(u64);
+impl TimePattern for Seconds {
+    type Expr = parse::Expr<parse::Second>;
+
+    #[inline]
+    fn compile(expr: Self::Expr) -> Self {
+        match expr {
+            parse::Expr::All => Self(Self::ALL),
+            parse::Expr::Many(exprs) => exprs.into_iter().fold(Self(0), Self::add_ors),
+        }
+    }
+
+    /// Returns whether this mask contains the minute value 0-59
+    #[inline]
+    fn contains(&self, date: DateTime<Utc>) -> bool {
+        let mask = 1u64 << date.minute();
+        self.0 & mask != 0
+    }
+}
+impl Seconds {
+    const BITS: u8 = 64;
+    const ALL: u64 = 0x0FFFFFFFFFFFFFFF;
+    const UPPER_BIT_BOUND: u8 = Self::ALL.trailing_ones() as u8;
+
+    #[inline]
+    fn value_pattern<T>(value: T) -> u64
+    where
+        T: Into<u8>,
+    {
+        let pattern = 1 << value.into();
+
+        debug_assert_pattern!(pattern, Self::ALL);
+
+        pattern
+    }
+
+    #[inline]
+    fn add_ors(mut self, expr: OrsExpr<parse::Second>) -> Self {
+        match expr.normalize() {
+            OrsExpr::One(one) => self.0 |= Self::value_pattern(one),
+            OrsExpr::Range(start, end) => {
+                if start <= end {
+                    let start = u8::from(start);
+                    let end = u8::from(end);
+
+                    // learn how this works in DayOfWeek's add_ors function
+                    let mut bits = Self::ALL;
+                    bits = (bits >> start) << start;
+                    if end < Self::UPPER_BIT_BOUND {
+                        let end_shift = Self::BITS.wrapping_sub(end + 1);
+                        bits = (bits << end_shift) >> end_shift;
+                    }
+                    debug_assert_pattern!(bits, Self::ALL);
+
+                    self.0 |= bits;
+                } else {
+                    let start = u8::from(start) - 1;
+                    let end = u8::from(end) + 1;
+
+                    let top_bits = (Self::ALL >> start) << start;
+
+                    let bottom_shift = Self::BITS.wrapping_sub(end);
+                    let bottom_bits = (Self::ALL << bottom_shift) >> bottom_shift;
+
+                    let bits = top_bits | bottom_bits;
+
+                    debug_assert_pattern!(bits, Self::ALL);
+
+                    self.0 |= bits;
+                }
+            }
+            OrsExpr::Step { start, end, step } => {
+                let start = u8::from(start);
+                let end = u8::from(end);
+                if start <= end {
+                    let range = (start..=end).step_by(u8::from(step) as usize);
+
+                    for shift in range {
+                        self.0 |= Self::value_pattern(shift);
+                    }
+                } else {
+                    let back = start..=parse::Minute::MAX;
+                    let front = parse::Minute::MIN..=end;
+                    let range = back.chain(front).step_by(u8::from(step) as usize);
+
+                    for shift in range {
+                        self.0 |= Self::value_pattern(shift);
+                    }
+                }
+            }
+        }
+        self
+    }
+}
+
 /// A bit-mask of all minutes in an hour set in a cron expression.
 #[derive(Debug, Default, PartialEq, Eq, Hash, Clone, Copy)]
 struct Minutes(u64);
@@ -877,6 +974,7 @@ impl Months {
 /// ```
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub struct Cron {
+    seconds: Seconds,
     minutes: Minutes,
     hours: Hours,
     dom: DaysOfMonth,
@@ -902,6 +1000,7 @@ impl Cron {
     /// Simplifies the cron expression into a cron value.
     pub fn new(expr: CronExpr) -> Self {
         Self {
+            seconds: TimePattern::compile(expr.seconds),
             minutes: TimePattern::compile(expr.minutes),
             hours: TimePattern::compile(expr.hours),
             dom: TimePattern::compile(expr.doms),
@@ -1558,12 +1657,12 @@ mod tests {
     #[test]
     fn parse_check_anytime() {
         check_does_contain(
-            "* * * * *",
+            "* * * * * *",
             &[
-                "1970-01-01 00:00",
-                "2016-11-08 23:53",
-                "2020-07-04 15:42",
-                "2072-02-29 01:15",
+                "1970-01-01 00:00:00",
+                "2016-11-08 23:53:02",
+                "2020-07-04 15:42:37",
+                "2072-02-29 01:15:40",
             ],
         );
     }

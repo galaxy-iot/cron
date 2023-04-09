@@ -52,6 +52,46 @@ pub trait ExprValue: Sized + Sealed {
     fn min() -> Self;
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Second(u8);
+impl Sealed for Second {}
+impl ExprValue for Second {
+    const MAX: u8 = 59;
+    const MIN: u8 = 0;
+
+    fn max() -> Self {
+        Self(Self::MAX)
+    }
+    fn min() -> Self {
+        Self(Self::MIN)
+    }
+}
+impl From<Second> for u8 {
+    /// Returns the value, 0-59
+    #[inline]
+    fn from(m: Second) -> Self {
+        m.0
+    }
+}
+impl TryFrom<u8> for Second {
+    type Error = ValueOutOfRangeError;
+
+    #[inline]
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        if value <= Self::MAX {
+            Ok(Self(value))
+        } else {
+            Err(ValueOutOfRangeError)
+        }
+    }
+}
+impl PartialEq<u8> for Second {
+    #[inline]
+    fn eq(&self, other: &u8) -> bool {
+        &self.0 == other
+    }
+}
+
 /// A minute value, 0-59
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Minute(u8);
@@ -630,6 +670,7 @@ impl<'a, E> IntoIterator for &'a Exprs<E> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct CronExpr {
+    pub seconds: Expr<Second>,
     /// The minute part of the expression
     pub minutes: Expr<Minute>,
     /// The hour part of the expression
@@ -826,6 +867,11 @@ fn month(s: &str) -> IResult<&str, Month> {
 }
 
 #[inline]
+fn seconds_expr(s: &str) -> IResult<&str, Expr<Second>> {
+    expr(map_digit1())(s)
+}
+
+#[inline]
 fn minutes_expr(s: &str) -> IResult<&str, Expr<Minute>> {
     expr(map_digit1())(s)
 }
@@ -1017,6 +1063,8 @@ impl FromStr for CronExpr {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let (_, expr) = all_consuming(map(
             tuple((
+                seconds_expr,
+                space1,
                 minutes_expr,
                 space1,
                 hours_expr,
@@ -1027,7 +1075,8 @@ impl FromStr for CronExpr {
                 space1,
                 dow_expr,
             )),
-            |(minutes, _, hours, _, doms, _, months, _, dows)| CronExpr {
+            |(seconds, _, minutes, _, hours, _, doms, _, months, _, dows)| CronExpr {
+                seconds,
                 minutes,
                 hours,
                 doms,
