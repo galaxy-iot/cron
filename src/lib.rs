@@ -1,20 +1,18 @@
 //! A "Quartz scheduler"-like cron parser powering Cron Triggers on Cloudflare Workers.
 
-#![cfg_attr(not(feature = "std"), no_std)]
-
-#[cfg(not(feature = "std"))]
 extern crate alloc;
 
 mod describe;
 pub mod parse;
 
-use chrono::{prelude::*, Duration};
+use chrono::{prelude::*, DateTime, Duration, Utc};
 
 use core::cmp;
 use core::fmt::Debug;
 use core::iter::FusedIterator;
 use core::ops::{Bound, RangeBounds};
 use core::str::FromStr;
+use std::collections::BTreeSet;
 
 use self::parse::{CronExpr, ExprValue, OrsExpr};
 
@@ -78,7 +76,7 @@ enum DaysOfWeekKind {
 
 /// A bit-mask of all the days of the week set in a cron expression.
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
-struct DaysOfWeek(DaysOfWeekKind, u8);
+struct DaysOfWeek(DaysOfWeekKind, u32);
 impl TimePattern for DaysOfWeek {
     type Expr = parse::DayOfWeekExpr;
 
@@ -86,9 +84,9 @@ impl TimePattern for DaysOfWeek {
     fn compile(expr: Self::Expr) -> Self {
         match expr {
             parse::DayOfWeekExpr::All => Self(DaysOfWeekKind::Star, 0),
-            parse::DayOfWeekExpr::Last(day) => Self(DaysOfWeekKind::Last, u8::from(day)),
+            parse::DayOfWeekExpr::Last(day) => Self(DaysOfWeekKind::Last, u32::from(day)),
             parse::DayOfWeekExpr::Nth(day, nth) => {
-                Self(DaysOfWeekKind::Nth, (u8::from(nth) << 3) | u8::from(day))
+                Self(DaysOfWeekKind::Nth, (u32::from(nth) << 3) | u32::from(day))
             }
             parse::DayOfWeekExpr::Many(exprs) => Self(
                 DaysOfWeekKind::Pattern,
@@ -102,10 +100,10 @@ impl TimePattern for DaysOfWeek {
     }
 }
 impl DaysOfWeek {
-    const BITS: u8 = 8;
-    const DAY_BITS: u8 = 0b0111_1111;
-    const ONE_DAY_BITS: u8 = 0b0000_0111;
-    const UPPER_BIT_BOUND: u8 = Self::DAY_BITS.trailing_ones() as u8;
+    const BITS: u32 = 8;
+    const DAY_BITS: u32 = 0b0111_1111;
+    const ONE_DAY_BITS: u32 = 0b0000_0111;
+    const UPPER_BIT_BOUND: u32 = Self::DAY_BITS.trailing_ones() as u32;
 
     #[inline]
     fn kind(&self) -> DaysOfWeekKind {
@@ -117,7 +115,7 @@ impl DaysOfWeek {
     }
 
     #[inline]
-    fn byte_to_weekday(value: u8) -> Weekday {
+    fn byte_to_weekday(value: u32) -> Weekday {
         match value {
             0 => Weekday::Sun,
             1 => Weekday::Mon,
@@ -140,7 +138,7 @@ impl DaysOfWeek {
     }
 
     #[inline]
-    fn nth(&self) -> Option<(u8, Weekday)> {
+    fn nth(&self) -> Option<(u32, Weekday)> {
         if let Self(DaysOfWeekKind::Nth, values) = *self {
             let weekday = values & Self::ONE_DAY_BITS;
             let nth = values >> 3;
@@ -154,18 +152,18 @@ impl DaysOfWeek {
     fn contains_date(&self, d: Date<Utc>) -> bool {
         match *self {
             Self(DaysOfWeekKind::Pattern, pattern) => {
-                let mask = 1u8 << d.weekday().num_days_from_sunday();
+                let mask = 1u32 << d.weekday().num_days_from_sunday();
                 pattern & mask != 0
             }
             Self(DaysOfWeekKind::Nth, bits) => {
                 let weekday = bits & Self::ONE_DAY_BITS;
                 let nth = bits >> 3;
-                let current_weekday = d.weekday().num_days_from_sunday() as u8;
+                let current_weekday = d.weekday().num_days_from_sunday() as u32;
 
                 weekday == current_weekday && (d.day0() / 7) + 1 == nth as u32
             }
             Self(DaysOfWeekKind::Last, weekday) => {
-                let current_weekday = d.weekday().num_days_from_sunday() as u8;
+                let current_weekday = d.weekday().num_days_from_sunday() as u32;
                 weekday == current_weekday && d.day() + 7 > days_in_month(d)
             }
             _ => true,
@@ -173,9 +171,9 @@ impl DaysOfWeek {
     }
 
     #[inline]
-    fn value_pattern<T>(value: T) -> u8
+    fn value_pattern<T>(value: T) -> u32
     where
-        T: Into<u8>,
+        T: Into<u32>,
     {
         let pattern = 1 << value.into();
 
@@ -185,13 +183,13 @@ impl DaysOfWeek {
     }
 
     #[inline]
-    fn add_ors(mut pattern: u8, expr: OrsExpr<parse::DayOfWeek>) -> u8 {
+    fn add_ors(mut pattern: u32, expr: OrsExpr<parse::DayOfWeek>) -> u32 {
         match expr.normalize() {
             OrsExpr::One(one) => pattern |= Self::value_pattern(one),
             OrsExpr::Range(start, end) => {
                 if start <= end {
-                    let start = u8::from(start);
-                    let end = u8::from(end);
+                    let start = u32::from(start);
+                    let end = u32::from(end);
 
                     // example: MON-FRI (or 2-6) (true value: 1-5)
                     // our bit map goes in reverse, so for weekdays
@@ -276,7 +274,7 @@ impl DaysOfWeek {
                     //
                     // ... ALL SAT FRI THU WED TUE MON SUN
                     // ... 0   1   1   0   0   0   0   0
-                    let start = u8::from(start) - 1;
+                    let start = u32::from(start) - 1;
                     top_bits = (top_bits >> start) << start;
 
                     // make a separate mask
@@ -298,7 +296,7 @@ impl DaysOfWeek {
                     //
                     // ... ALL SAT FRI THU WED TUE MON SUN
                     // ... 0   0   0   0   0   0   0   1
-                    let end = u8::from(end) + 1;
+                    let end = u32::from(end) + 1;
                     let shift = Self::BITS.wrapping_sub(end);
                     bottom_bits = (bottom_bits << shift) >> shift;
 
@@ -310,10 +308,10 @@ impl DaysOfWeek {
                 }
             }
             OrsExpr::Step { start, end, step } => {
-                let start = u8::from(start);
-                let end = u8::from(end);
+                let start = u32::from(start);
+                let end = u32::from(end);
                 if start <= end {
-                    let range = (start..=end).step_by(u8::from(step) as usize);
+                    let range = (start..=end).step_by(u32::from(step) as usize);
 
                     for shift in range {
                         pattern |= Self::value_pattern(shift);
@@ -321,7 +319,7 @@ impl DaysOfWeek {
                 } else {
                     let back = start..=parse::DayOfWeek::MAX;
                     let front = parse::DayOfWeek::MIN..=end;
-                    let range = back.chain(front).step_by(u8::from(step) as usize);
+                    let range = back.chain(front).step_by(u32::from(step) as usize);
 
                     for shift in range {
                         pattern |= Self::value_pattern(shift);
@@ -350,19 +348,19 @@ impl TimePattern for Seconds {
     /// Returns whether this mask contains the minute value 0-59
     #[inline]
     fn contains(&self, date: DateTime<Utc>) -> bool {
-        let mask = 1u64 << date.minute();
+        let mask = 1u64 << date.second();
         self.0 & mask != 0
     }
 }
 impl Seconds {
-    const BITS: u8 = 64;
+    const BITS: u32 = 64;
     const ALL: u64 = 0x0FFFFFFFFFFFFFFF;
-    const UPPER_BIT_BOUND: u8 = Self::ALL.trailing_ones() as u8;
+    const UPPER_BIT_BOUND: u32 = Self::ALL.trailing_ones() as u32;
 
     #[inline]
     fn value_pattern<T>(value: T) -> u64
     where
-        T: Into<u8>,
+        T: Into<u32>,
     {
         let pattern = 1 << value.into();
 
@@ -377,8 +375,8 @@ impl Seconds {
             OrsExpr::One(one) => self.0 |= Self::value_pattern(one),
             OrsExpr::Range(start, end) => {
                 if start <= end {
-                    let start = u8::from(start);
-                    let end = u8::from(end);
+                    let start = u32::from(start);
+                    let end = u32::from(end);
 
                     // learn how this works in DayOfWeek's add_ors function
                     let mut bits = Self::ALL;
@@ -391,8 +389,8 @@ impl Seconds {
 
                     self.0 |= bits;
                 } else {
-                    let start = u8::from(start) - 1;
-                    let end = u8::from(end) + 1;
+                    let start = u32::from(start) - 1;
+                    let end = u32::from(end) + 1;
 
                     let top_bits = (Self::ALL >> start) << start;
 
@@ -407,10 +405,10 @@ impl Seconds {
                 }
             }
             OrsExpr::Step { start, end, step } => {
-                let start = u8::from(start);
-                let end = u8::from(end);
+                let start = u32::from(start);
+                let end = u32::from(end);
                 if start <= end {
-                    let range = (start..=end).step_by(u8::from(step) as usize);
+                    let range = (start..=end).step_by(u32::from(step) as usize);
 
                     for shift in range {
                         self.0 |= Self::value_pattern(shift);
@@ -418,7 +416,7 @@ impl Seconds {
                 } else {
                     let back = start..=parse::Minute::MAX;
                     let front = parse::Minute::MIN..=end;
-                    let range = back.chain(front).step_by(u8::from(step) as usize);
+                    let range = back.chain(front).step_by(u32::from(step) as usize);
 
                     for shift in range {
                         self.0 |= Self::value_pattern(shift);
@@ -452,14 +450,20 @@ impl TimePattern for Minutes {
     }
 }
 impl Minutes {
-    const BITS: u8 = 64;
+    const BITS: u32 = 64;
     const ALL: u64 = 0x0FFFFFFFFFFFFFFF;
-    const UPPER_BIT_BOUND: u8 = Self::ALL.trailing_ones() as u8;
+    const UPPER_BIT_BOUND: u32 = Self::ALL.trailing_ones() as u32;
+
+    #[inline]
+    fn contains_minute(&self, time: NaiveTime) -> bool {
+        let mask = 1u64 << time.minute();
+        self.0 & mask != 0
+    }
 
     #[inline]
     fn value_pattern<T>(value: T) -> u64
     where
-        T: Into<u8>,
+        T: Into<u32>,
     {
         let pattern = 1 << value.into();
 
@@ -474,8 +478,8 @@ impl Minutes {
             OrsExpr::One(one) => self.0 |= Self::value_pattern(one),
             OrsExpr::Range(start, end) => {
                 if start <= end {
-                    let start = u8::from(start);
-                    let end = u8::from(end);
+                    let start = u32::from(start);
+                    let end = u32::from(end);
 
                     // learn how this works in DayOfWeek's add_ors function
                     let mut bits = Self::ALL;
@@ -488,8 +492,8 @@ impl Minutes {
 
                     self.0 |= bits;
                 } else {
-                    let start = u8::from(start) - 1;
-                    let end = u8::from(end) + 1;
+                    let start = u32::from(start) - 1;
+                    let end = u32::from(end) + 1;
 
                     let top_bits = (Self::ALL >> start) << start;
 
@@ -504,10 +508,10 @@ impl Minutes {
                 }
             }
             OrsExpr::Step { start, end, step } => {
-                let start = u8::from(start);
-                let end = u8::from(end);
+                let start = u32::from(start);
+                let end = u32::from(end);
                 if start <= end {
-                    let range = (start..=end).step_by(u8::from(step) as usize);
+                    let range = (start..=end).step_by(u32::from(step) as usize);
 
                     for shift in range {
                         self.0 |= Self::value_pattern(shift);
@@ -515,7 +519,7 @@ impl Minutes {
                 } else {
                     let back = start..=parse::Minute::MAX;
                     let front = parse::Minute::MIN..=end;
-                    let range = back.chain(front).step_by(u8::from(step) as usize);
+                    let range = back.chain(front).step_by(u32::from(step) as usize);
 
                     for shift in range {
                         self.0 |= Self::value_pattern(shift);
@@ -548,9 +552,9 @@ impl TimePattern for Hours {
     }
 }
 impl Hours {
-    const BITS: u8 = 32;
+    const BITS: u32 = 32;
     const ALL: u32 = 0x00FFFFFF;
-    const UPPER_BIT_BOUND: u8 = Self::ALL.trailing_ones() as u8;
+    const UPPER_BIT_BOUND: u32 = Self::ALL.trailing_ones() as u32;
 
     #[inline]
     fn contains_hour(&self, time: NaiveTime) -> bool {
@@ -561,7 +565,7 @@ impl Hours {
     #[inline]
     fn value_pattern<T>(value: T) -> u32
     where
-        T: Into<u8>,
+        T: Into<u32>,
     {
         let pattern = 1 << value.into();
 
@@ -576,8 +580,8 @@ impl Hours {
             OrsExpr::One(one) => self.0 |= Self::value_pattern(one),
             OrsExpr::Range(start, end) => {
                 if start <= end {
-                    let start = u8::from(start);
-                    let end = u8::from(end);
+                    let start = u32::from(start);
+                    let end = u32::from(end);
 
                     // learn how this works in DayOfWeek's add_ors function
                     let mut bits = Self::ALL;
@@ -590,8 +594,8 @@ impl Hours {
 
                     self.0 |= bits;
                 } else {
-                    let start = u8::from(start) - 1;
-                    let end = u8::from(end) + 1;
+                    let start = u32::from(start) - 1;
+                    let end = u32::from(end) + 1;
 
                     let top_bits = (Self::ALL >> start) << start;
 
@@ -606,10 +610,10 @@ impl Hours {
                 }
             }
             OrsExpr::Step { start, end, step } => {
-                let start = u8::from(start);
-                let end = u8::from(end);
+                let start = u32::from(start);
+                let end = u32::from(end);
                 if start <= end {
-                    let range = (start..=end).step_by(u8::from(step) as usize);
+                    let range = (start..=end).step_by(u32::from(step) as usize);
 
                     for shift in range {
                         self.0 |= Self::value_pattern(shift);
@@ -617,7 +621,7 @@ impl Hours {
                 } else {
                     let back = start..=parse::Hour::MAX;
                     let front = parse::Hour::MIN..=end;
-                    let range = back.chain(front).step_by(u8::from(step) as usize);
+                    let range = back.chain(front).step_by(u32::from(step) as usize);
 
                     for shift in range {
                         self.0 |= Self::value_pattern(shift);
@@ -651,13 +655,13 @@ impl TimePattern for DaysOfMonth {
             DayOfMonthExpr::Last(Last::Day) => Self(DaysOfMonthKind::Last, 0),
             DayOfMonthExpr::Last(Last::Weekday) => Self(DaysOfMonthKind::LastWeekday, 0),
             DayOfMonthExpr::Last(Last::Offset(offset)) => {
-                Self(DaysOfMonthKind::Last, u8::from(offset) as u32)
+                Self(DaysOfMonthKind::Last, u32::from(offset) as u32)
             }
             DayOfMonthExpr::Last(Last::OffsetWeekday(offset)) => {
-                Self(DaysOfMonthKind::LastWeekday, u8::from(offset) as u32)
+                Self(DaysOfMonthKind::LastWeekday, u32::from(offset) as u32)
             }
             DayOfMonthExpr::ClosestWeekday(day) => {
-                Self(DaysOfMonthKind::Weekday, (u8::from(day) + 1) as u32)
+                Self(DaysOfMonthKind::Weekday, (u32::from(day) + 1) as u32)
             }
             DayOfMonthExpr::Many(exprs) => Self(
                 DaysOfMonthKind::Pattern,
@@ -672,10 +676,10 @@ impl TimePattern for DaysOfMonth {
     }
 }
 impl DaysOfMonth {
-    const BITS: u8 = 32;
+    const BITS: u32 = 32;
     const DAY_BITS: u32 = 0x0_7F_FF_FF_FF;
     const ONE_DAY_BITS: u32 = 0b0001_1111;
-    const UPPER_BIT_BOUND: u8 = Self::DAY_BITS.trailing_ones() as u8;
+    const UPPER_BIT_BOUND: u32 = Self::DAY_BITS.trailing_ones() as u32;
 
     #[inline]
     fn kind(&self) -> DaysOfMonthKind {
@@ -697,13 +701,13 @@ impl DaysOfMonth {
     /// Returns the one day set in this expression. Used to get last day offsets and the day
     /// in a closest weekday expression
     #[inline]
-    fn one_value(&self) -> u8 {
-        (self.1 & Self::ONE_DAY_BITS) as u8
+    fn one_value(&self) -> u32 {
+        (self.1 & Self::ONE_DAY_BITS) as u32
     }
 
     #[inline]
-    fn first_set0(&self) -> Option<u8> {
-        let trailing = self.1.trailing_zeros() as u8;
+    fn first_set0(&self) -> Option<u32> {
+        let trailing = self.1.trailing_zeros() as u32;
         if trailing < Self::BITS {
             Some(trailing)
         } else {
@@ -712,7 +716,7 @@ impl DaysOfMonth {
     }
 
     #[inline]
-    fn first_set(&self) -> Option<u8> {
+    fn first_set(&self) -> Option<u32> {
         self.first_set0().map(|i| i + 1)
     }
 
@@ -777,7 +781,7 @@ impl DaysOfMonth {
     #[inline]
     fn value_pattern<T>(value: T) -> u32
     where
-        T: Into<u8>,
+        T: Into<u32>,
     {
         let pattern = 1 << value.into();
 
@@ -792,8 +796,8 @@ impl DaysOfMonth {
             OrsExpr::One(day) => pattern |= Self::value_pattern(day),
             OrsExpr::Range(start, end) => {
                 if start <= end {
-                    let start = u8::from(start);
-                    let end = u8::from(end);
+                    let start = u32::from(start);
+                    let end = u32::from(end);
 
                     // learn how this works in DayOfWeek's add_ors function
                     let mut bits = Self::DAY_BITS;
@@ -806,8 +810,8 @@ impl DaysOfMonth {
 
                     pattern |= bits;
                 } else {
-                    let start = u8::from(start) - 1;
-                    let end = u8::from(end) + 1;
+                    let start = u32::from(start) - 1;
+                    let end = u32::from(end) + 1;
 
                     let top_bits = (Self::DAY_BITS >> start) << start;
 
@@ -822,10 +826,10 @@ impl DaysOfMonth {
                 }
             }
             OrsExpr::Step { start, end, step } => {
-                let start = u8::from(start);
-                let end = u8::from(end);
+                let start = u32::from(start);
+                let end = u32::from(end);
                 if start <= end {
-                    let range = (start..=end).step_by(u8::from(step) as usize);
+                    let range = (start..=end).step_by(u32::from(step) as usize);
 
                     for shift in range {
                         pattern |= Self::value_pattern(shift);
@@ -833,7 +837,7 @@ impl DaysOfMonth {
                 } else {
                     let back = start..=parse::DayOfMonth::MAX;
                     let front = parse::DayOfMonth::MIN..=end;
-                    let range = back.chain(front).step_by(u8::from(step) as usize);
+                    let range = back.chain(front).step_by(u32::from(step) as usize);
 
                     for shift in range {
                         pattern |= Self::value_pattern(shift);
@@ -847,7 +851,7 @@ impl DaysOfMonth {
 
 /// A bit-mask of all the months set in a cron expression.
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
-struct Months(u16);
+struct Months(u32);
 impl TimePattern for Months {
     type Expr = parse::Expr<parse::Month>;
 
@@ -866,25 +870,23 @@ impl TimePattern for Months {
     }
 }
 impl Months {
-    const BITS: u8 = 16;
-    const ALL: u16 = 0x0FFF;
-    const UPPER_BIT_BOUND: u8 = Self::ALL.trailing_ones() as u8;
+    const BITS: u32 = 16;
+    const ALL: u32 = 0x0FFF;
+    const UPPER_BIT_BOUND: u32 = Self::ALL.trailing_ones() as u32;
 
     #[inline]
     fn contains_month(&self, date: Date<Utc>) -> bool {
-        let mask = 1u16 << date.month0();
+        let mask = 1u32 << date.month0();
         self.0 & mask != 0
     }
 
     #[inline]
-    fn value_pattern<T>(value: T) -> u16
+    fn value_pattern<T>(value: T) -> u32
     where
-        T: Into<u8>,
+        T: Into<u32>,
     {
         let pattern = 1 << value.into();
-
         debug_assert_pattern!(pattern, Self::ALL);
-
         pattern
     }
 
@@ -894,8 +896,8 @@ impl Months {
             OrsExpr::One(one) => self.0 |= Self::value_pattern(one),
             OrsExpr::Range(start, end) => {
                 if start <= end {
-                    let start = u8::from(start);
-                    let end = u8::from(end);
+                    let start = u32::from(start);
+                    let end = u32::from(end);
 
                     // learn how this works in DayOfWeek's add_ors function
                     let mut bits = Self::ALL;
@@ -908,8 +910,8 @@ impl Months {
 
                     self.0 |= bits;
                 } else {
-                    let start = u8::from(start) - 1;
-                    let end = u8::from(end) + 1;
+                    let start = u32::from(start) - 1;
+                    let end = u32::from(end) + 1;
 
                     let top_bits = (Self::ALL >> start) << start;
 
@@ -924,10 +926,10 @@ impl Months {
                 }
             }
             OrsExpr::Step { start, end, step } => {
-                let start = u8::from(start);
-                let end = u8::from(end);
+                let start = u32::from(start);
+                let end = u32::from(end);
                 if start <= end {
-                    let range = (start..=end).step_by(u8::from(step) as usize);
+                    let range = (start..=end).step_by(u32::from(step) as usize);
 
                     for shift in range {
                         self.0 |= Self::value_pattern(shift);
@@ -935,7 +937,7 @@ impl Months {
                 } else {
                     let back = start..=parse::Month::MAX;
                     let front = parse::Month::MIN..=end;
-                    let range = back.chain(front).step_by(u8::from(step) as usize);
+                    let range = back.chain(front).step_by(u32::from(step) as usize);
 
                     for shift in range {
                         self.0 |= Self::value_pattern(shift);
@@ -944,6 +946,99 @@ impl Months {
             }
         }
         self
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
+struct Years(BTreeSet<u32>);
+impl TimePattern for Years {
+    type Expr = parse::Expr<parse::Year>;
+
+    #[inline]
+    fn compile(expr: Self::Expr) -> Self {
+        match expr {
+            parse::Expr::All => {
+                let mut btree_set = BTreeSet::<u32>::new();
+                let range = parse::Year::MIN..parse::Year::MAX;
+                let range_iter = range.into_iter();
+                for i in range_iter {
+                    btree_set.insert(i);
+                }
+
+                Self(btree_set)
+            }
+            parse::Expr::Many(exprs) => {
+                let btree_set = BTreeSet::<u32>::new();
+                exprs.into_iter().fold(Self(btree_set), Self::add_ors)
+            }
+        }
+    }
+
+    /// Returns whether this mask contains the month value 0-11
+    #[inline]
+    fn contains(&self, date: DateTime<Utc>) -> bool {
+        self.contains_month(date.date())
+    }
+}
+
+impl Years {
+    #[inline]
+    fn contains_month(&self, date: Date<Utc>) -> bool {
+        let year = date.year() as u32;
+        self.0.contains(&year)
+    }
+
+    #[inline]
+    fn add_ors(mut self, expr: OrsExpr<parse::Year>) -> Self {
+        match expr.normalize() {
+            OrsExpr::One(one) => {
+                self.0.insert(one.into());
+                return self;
+            }
+            OrsExpr::Range(start, end) => {
+                let start = u32::from(start);
+                let end = u32::from(end);
+
+                if start < end {
+                    let range = start..end;
+                    for i in range {
+                        self.0.insert(i);
+                    }
+                } else {
+                    let left_range = parse::Year::MIN..start;
+                    let right_range = end..parse::Year::MAX;
+
+                    for i in left_range {
+                        self.0.insert(i);
+                    }
+
+                    for i in right_range {
+                        self.0.insert(i);
+                    }
+                }
+
+                return self;
+            }
+            OrsExpr::Step { start, end, step } => {
+                let start = u32::from(start);
+                let end = u32::from(end);
+                if start <= end {
+                    let range = (start..=end).step_by(u32::from(step) as usize);
+                    for i in range {
+                        self.0.insert(i);
+                    }
+                } else {
+                    let back = start..=parse::Month::MAX;
+                    let front = parse::Month::MIN..=end;
+                    let range = back.chain(front).step_by(u32::from(step) as usize);
+                    for i in range {
+                        self.0.insert(i);
+                    }
+                }
+
+                return self;
+            }
+        };
     }
 }
 
@@ -980,6 +1075,7 @@ pub struct Cron {
     dom: DaysOfMonth,
     months: Months,
     dow: DaysOfWeek,
+    years: Years,
 }
 
 impl FromStr for Cron {
@@ -1006,6 +1102,7 @@ impl Cron {
             dom: TimePattern::compile(expr.doms),
             months: TimePattern::compile(expr.months),
             dow: TimePattern::compile(expr.dows),
+            years: TimePattern::compile(expr.years),
         }
     }
 
@@ -1040,11 +1137,13 @@ impl Cron {
             } else {
                 self.dom
                     .first_set()
-                    .expect("At least one day should be set")
+                    .expect("At least one day should be set");
+
+                return false;
             };
 
-            const MAX_31_MONTHS: u16 = 0b1010_1101_0101;
-            const MAX_30_MONTHS: u16 = 0b0101_0010_1000;
+            const MAX_31_MONTHS: u32 = 0b1010_1101_0101;
+            const MAX_30_MONTHS: u32 = 0b0101_0010_1000;
             let max = if (self.months.0 & MAX_31_MONTHS) != 0 {
                 31
             } else if (self.months.0 & MAX_30_MONTHS) != 0 {
@@ -1072,8 +1171,10 @@ impl Cron {
     /// ```
     #[inline]
     pub fn contains(&self, dt: DateTime<Utc>) -> bool {
-        let contains_minutes_hour_months =
-            self.minutes.contains(dt) && self.hours.contains(dt) && self.months.contains(dt);
+        let contains_minutes_hour_months = self.seconds.contains(dt)
+            && self.minutes.contains(dt)
+            && self.hours.contains(dt)
+            && self.months.contains(dt);
 
         if !contains_minutes_hour_months {
             return false;
@@ -1210,7 +1311,7 @@ impl Cron {
     /// ```
     #[inline]
     pub fn next_from(&self, start: DateTime<Utc>) -> Option<DateTime<Utc>> {
-        let start = minute_floor(start);
+        let start = second_floor(start);
         if self.any() {
             self.find_next(start, chrono::MAX_DATETIME)
         } else {
@@ -1231,7 +1332,8 @@ impl Cron {
     /// ```
     #[inline]
     pub fn next_after(&self, start: DateTime<Utc>) -> Option<DateTime<Utc>> {
-        let start = next_minute(minute_floor(start))?;
+        let start = next_second(second_floor(start))?;
+        println!("{:?}", start);
         if self.any() {
             self.find_next(start, chrono::MAX_DATETIME)
         } else {
@@ -1244,7 +1346,10 @@ impl Cron {
     fn find_next(&self, start: DateTime<Utc>, end: DateTime<Utc>) -> Option<DateTime<Utc>> {
         if self.contains_date(start.date()) {
             match self.find_next_time(start.time(), time_bound_for_date(start.date(), end)) {
-                Ok(Some(next_time)) => return start.date().and_time(next_time),
+                Ok(Some(next_time)) => {
+                    return start.date().and_time(next_time);
+                }
+
                 Err(OutOfBound) => return None,
                 Ok(None) => {}
             }
@@ -1272,11 +1377,28 @@ impl Cron {
         }
     }
 
+    fn find_next_second(&self, start: NaiveTime) -> Option<NaiveTime> {
+        let Seconds(map) = self.seconds;
+        let current_second = start.second();
+        // clear the minutes we're already past
+        let bottom_cleared = (map >> current_second) << current_second;
+        // count trailing zeros to find the first set. if none is set, we get back the number of
+        // bits in the integer
+        let trailing_zeros = bottom_cleared.trailing_zeros();
+
+        if trailing_zeros < Seconds::BITS as u32 {
+            start.with_second(trailing_zeros)
+        } else {
+            None
+        }
+    }
+
     /// Gets the next minute (current inclusive) matching the cron expression, or none if the current
     /// minute / no upcoming minute in the hour matches.
     fn find_next_minute(&self, start: NaiveTime) -> Option<NaiveTime> {
         let Minutes(map) = self.minutes;
         let current_minute = start.minute();
+
         // clear the minutes we're already past
         let bottom_cleared = (map >> current_minute) << current_minute;
         // count trailing zeros to find the first set. if none is set, we get back the number of
@@ -1293,6 +1415,7 @@ impl Cron {
     /// no upcoming hour in the day matches.
     fn find_next_hour(&self, start: NaiveTime) -> Option<NaiveTime> {
         let Hours(map) = self.hours;
+        println!("{:?}", self.hours);
         let current_hour = start.hour();
         let bottom_cleared = (map >> current_hour) << current_hour;
         let trailing_zeros = bottom_cleared.trailing_zeros();
@@ -1310,16 +1433,30 @@ impl Cron {
         end: Option<NaiveTime>,
     ) -> Result<Option<NaiveTime>, OutOfBound> {
         if self.hours.contains_hour(start) {
-            match (self.find_next_minute(start), end) {
-                (Some(next_minute), Some(end)) if next_minute > end => return Err(OutOfBound),
-                (Some(next_minute), _) => return Ok(Some(next_minute)),
-                (None, _) => {}
+            if self.minutes.contains_minute(start) {
+                match (self.find_next_second(start), end) {
+                    (Some(next_second), Some(end)) if next_second > end => return Err(OutOfBound),
+                    (Some(next_second), _) => return Ok(Some(next_second)),
+                    (None, _) => {}
+                }
+
+                // contains minute but, the second doesn't match
+                let next_second = NaiveTime::from_hms_opt(start.hour(), start.minute() + 1, 0)
+                    .and_then(|time| self.find_next_minute(time))
+                    .and_then(|time| self.find_next_second(time));
+
+                match (next_second, end) {
+                    (Some(next_second), Some(end)) if next_second > end => return Err(OutOfBound),
+                    (Some(next_second), _) => return Ok(Some(next_second)),
+                    (None, _) => return Ok(None),
+                };
             }
         }
 
         let next_minute = NaiveTime::from_hms_opt(start.hour() + 1, 0, 0)
             .and_then(|time| self.find_next_hour(time))
-            .and_then(|time| self.find_next_minute(time));
+            .and_then(|time| self.find_next_minute(time))
+            .and_then(|time| self.find_next_second(time));
 
         match (next_minute, end) {
             (Some(next_minute), Some(end)) if next_minute > end => Err(OutOfBound),
@@ -1545,6 +1682,12 @@ fn minute_floor(dt: DateTime<Utc>) -> DateTime<Utc> {
 }
 
 #[inline]
+fn second_floor(dt: DateTime<Utc>) -> DateTime<Utc> {
+    dt.with_nanosecond(0)
+        .expect("zero is a valid nanosecond value")
+}
+
+#[inline]
 fn previous_minute(dt: DateTime<Utc>) -> Option<DateTime<Utc>> {
     dt.checked_sub_signed(Duration::minutes(1))
 }
@@ -1552,6 +1695,10 @@ fn previous_minute(dt: DateTime<Utc>) -> Option<DateTime<Utc>> {
 #[inline]
 fn next_minute(dt: DateTime<Utc>) -> Option<DateTime<Utc>> {
     dt.checked_add_signed(Duration::minutes(1))
+}
+
+fn next_second(dt: DateTime<Utc>) -> Option<DateTime<Utc>> {
+    dt.checked_add_signed(Duration::seconds(1))
 }
 
 /// Gets the next month in the year if one exists.
@@ -1615,11 +1762,10 @@ impl FusedIterator for CronTimesIter {}
 mod tests {
     use super::*;
 
-    #[cfg(not(feature = "std"))]
+    //#[cfg(not(feature = "std"))]
+
     use alloc::{string::ToString, vec::Vec};
-
-    const FORMAT: &str = "%F %R";
-
+    const FORMAT: &str = "%Y-%m-%d %H:%M:%S";
     fn check_does_contain(cron: &str, dates: impl IntoIterator<Item = impl AsRef<str>>) {
         let parsed: Cron = cron.parse().unwrap();
 
@@ -1655,6 +1801,16 @@ mod tests {
     }
 
     #[test]
+    fn get_next() {
+        let cron = "1 1 1 * * *";
+        let parsed = cron.parse::<Cron>().unwrap();
+        let local = Utc::now();
+        println!("{:?}", local);
+        let ret = parsed.next_after(local).unwrap();
+        println!("{:?}", ret)
+    }
+
+    #[test]
     fn parse_check_anytime() {
         check_does_contain(
             "* * * * * *",
@@ -1669,26 +1825,26 @@ mod tests {
 
     #[test]
     fn parse_check_specific_time() {
-        let cron = "5 0 23 8 *";
+        let cron = "1 5 0 23 8 *";
 
         check_does_contain(
             cron,
             &[
-                "2020-08-23 00:05",
-                "2021-08-23 00:05",
-                "2022-08-23 00:05",
-                "2023-08-23 00:05",
+                "2020-08-23 00:05:01",
+                "2021-08-23 00:05:01",
+                "2022-08-23 00:05:01",
+                "2023-08-23 00:05:01",
             ],
         );
 
         check_does_not_contain(
             cron,
             &[
-                "1970-01-01 00:00",
-                "2016-11-08 23:53",
-                "2020-07-04 15:42",
-                "2072-02-29 01:15",
-                "2020-08-23 11:05",
+                "1970-01-01 00:00:00",
+                "2016-11-08 23:53:43",
+                "2020-07-04 15:42:21",
+                "2072-02-29 01:15:54",
+                "2020-08-23 11:05:37",
             ],
         );
     }

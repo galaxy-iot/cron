@@ -3,8 +3,8 @@ use crate::parse::*;
 use chrono::NaiveTime;
 use core::fmt::{self, Display, Formatter};
 
-fn postfixed<T: Into<usize>>(x: T) -> impl Display {
-    let x: usize = x.into();
+fn postfixed<T: Into<u32>>(x: T) -> impl Display {
+    let x: u32 = x.into();
     display(move |f| match x % 100 {
         1 => write!(f, "{}st", x),
         2 => write!(f, "{}nd", x),
@@ -74,16 +74,16 @@ impl Default for English {
 impl English {
     fn minute(&self, h: OrsExpr<Minute>) -> impl Display {
         display(move |f| match h {
-            OrsExpr::One(minute) => write!(f, "{}", u8::from(minute)),
+            OrsExpr::One(minute) => write!(f, "{}", u32::from(minute)),
             OrsExpr::Range(start, end) => {
-                write!(f, "{} through {}", u8::from(start), u8::from(end))
+                write!(f, "{} through {}", u32::from(start), u32::from(end))
             }
             OrsExpr::Step { start, end, step } => write!(
                 f,
                 "every {} minute from {} through {}",
-                postfixed(u8::from(step)),
-                u8::from(start),
-                u8::from(end)
+                postfixed(u32::from(step)),
+                u32::from(start),
+                u32::from(end)
             ),
         })
     }
@@ -92,21 +92,21 @@ impl English {
             OrsExpr::One(hour) => write!(
                 f,
                 "between {} and {}",
-                self.time(hour, 0),
-                self.time(hour, 59)
+                self.time(hour, 0u32),
+                self.time(hour, 59u32)
             ),
             OrsExpr::Range(start, end) => write!(
                 f,
                 "between {} and {}",
-                self.time(start, 0),
-                self.time(end, 59)
+                self.time(start, 0u32),
+                self.time(end, 59u32)
             ),
             OrsExpr::Step { start, end, step } => write!(
                 f,
                 "every {} hour between {} and {}",
-                postfixed(u8::from(step)),
-                self.time(start, 0),
-                self.time(end, 59)
+                postfixed(u32::from(step)),
+                self.time(start, 0u32),
+                self.time(end, 59u32)
             ),
         })
     }
@@ -122,7 +122,7 @@ impl English {
             OrsExpr::Step { start, end, step } => write!(
                 f,
                 "every {} month from {} to {}",
-                postfixed(u8::from(step)),
+                postfixed(u32::from(step)),
                 chrono::Month::from(start).name(),
                 chrono::Month::from(end).name()
             ),
@@ -135,7 +135,7 @@ impl English {
             OrsExpr::Step { start, end, step } => write!(
                 f,
                 "every {} weekday {} through {}",
-                postfixed(u8::from(step)),
+                postfixed(u32::from(step)),
                 weekday(start),
                 weekday(end)
             ),
@@ -143,23 +143,23 @@ impl English {
     }
     fn day_of_month(&self, h: OrsExpr<DayOfMonth>) -> impl Display {
         display(move |f| match h {
-            OrsExpr::One(dom) => write!(f, "{}", postfixed(u8::from(dom) + 1)),
+            OrsExpr::One(dom) => write!(f, "{}", postfixed(u32::from(dom) + 1)),
             OrsExpr::Range(start, end) => write!(
                 f,
                 "{} to {}",
-                postfixed(u8::from(start) + 1),
-                postfixed(u8::from(end) + 1)
+                postfixed(u32::from(start) + 1),
+                postfixed(u32::from(end) + 1)
             ),
             OrsExpr::Step { start, end, step } => write!(
                 f,
                 "every {} day from the {} to the {}",
-                postfixed(u8::from(step)),
-                postfixed(u8::from(start) + 1),
-                postfixed(u8::from(end) + 1)
+                postfixed(u32::from(step)),
+                postfixed(u32::from(start) + 1),
+                postfixed(u32::from(end) + 1)
             ),
         })
     }
-    fn time<H: Into<u8>, M: Into<u8>>(&self, hour: H, minute: M) -> impl Display {
+    fn time<H: Into<u32>, M: Into<u32>>(&self, hour: H, minute: M) -> impl Display {
         let time = NaiveTime::from_hms(hour.into() as u32, minute.into() as u32, 0);
         let fmt = match self.hour {
             HourFormat::Hour12 => "%-I:%M %p",
@@ -196,7 +196,7 @@ impl Language for English {
                 let first = first.normalize();
                 match tail.as_slice() {
                     [] => match first {
-                        OrsExpr::One(value) => match u8::from(value) {
+                        OrsExpr::One(value) => match u32::from(value) {
                             0 => write!(f, "Every hour"),
                             1 => write!(f, "At 1 minute past the hour"),
                             v => write!(f, "At {} minutes past the hour", v),
@@ -204,15 +204,15 @@ impl Language for English {
                         OrsExpr::Range(start, end) => write!(
                             f,
                             "Minutes {} through {} past the hour",
-                            u8::from(start),
-                            u8::from(end)
+                            u32::from(start),
+                            u32::from(end)
                         )?,
                         OrsExpr::Step { start, end, step } => write!(
                             f,
                             "Every {} minute starting from minute {} to minute {} past the hour",
-                            postfixed(u8::from(step)),
-                            u8::from(start),
-                            u8::from(end),
+                            postfixed(u32::from(step)),
+                            u32::from(start),
+                            u32::from(end),
                         )?,
                     },
                     [second] => write!(
@@ -299,17 +299,19 @@ impl Language for English {
             &DayOfMonthExpr::ClosestWeekday(day) => write!(
                 f,
                 " on the closest weekday to the {}",
-                postfixed(u8::from(day) + 1)
+                postfixed(u32::from(day) + 1)
             )?,
             DayOfMonthExpr::Last(Last::Day) => write!(f, " on the last day")?,
             DayOfMonthExpr::Last(Last::Weekday) => write!(f, " on the last weekday")?,
-            &DayOfMonthExpr::Last(Last::Offset(offset)) => {
-                write!(f, " on the {} to last day", postfixed(u8::from(offset) + 1))?
-            }
+            &DayOfMonthExpr::Last(Last::Offset(offset)) => write!(
+                f,
+                " on the {} to last day",
+                postfixed(u32::from(offset) + 1)
+            )?,
             &DayOfMonthExpr::Last(Last::OffsetWeekday(offset)) => write!(
                 f,
                 " on the closest weekday to the {} to last day",
-                postfixed(u8::from(offset) + 1)
+                postfixed(u32::from(offset) + 1)
             )?,
             DayOfMonthExpr::Many(Exprs { first, tail }) => {
                 let first = first.normalize();
@@ -341,7 +343,7 @@ impl Language for English {
             DayOfWeekExpr::All => {}
             &DayOfWeekExpr::Last(day) => write!(f, " on the last {}", weekday(day))?,
             &DayOfWeekExpr::Nth(day, nth) => {
-                write!(f, " on the {} {}", postfixed(u8::from(nth)), weekday(day))?
+                write!(f, " on the {} {}", postfixed(u32::from(nth)), weekday(day))?
             }
             DayOfWeekExpr::Many(Exprs { first, tail }) => {
                 let first = first.normalize();

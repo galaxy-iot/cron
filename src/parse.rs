@@ -42,9 +42,9 @@ impl std::error::Error for ValueOutOfRangeError {}
 /// A trait implemented for expression values that defines a MIN value and a MAX value.
 pub trait ExprValue: Sized + Sealed {
     /// The max value for an expression value
-    const MAX: u8;
+    const MAX: u32;
     /// The min value for an expression value
-    const MIN: u8;
+    const MIN: u32;
 
     /// The max value as this expression value type
     fn max() -> Self;
@@ -53,11 +53,11 @@ pub trait ExprValue: Sized + Sealed {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Second(u8);
+pub struct Second(u32);
 impl Sealed for Second {}
 impl ExprValue for Second {
-    const MAX: u8 = 59;
-    const MIN: u8 = 0;
+    const MAX: u32 = 59;
+    const MIN: u32 = 0;
 
     fn max() -> Self {
         Self(Self::MAX)
@@ -66,18 +66,18 @@ impl ExprValue for Second {
         Self(Self::MIN)
     }
 }
-impl From<Second> for u8 {
+impl From<Second> for u32 {
     /// Returns the value, 0-59
     #[inline]
     fn from(m: Second) -> Self {
         m.0
     }
 }
-impl TryFrom<u8> for Second {
+impl TryFrom<u32> for Second {
     type Error = ValueOutOfRangeError;
 
     #[inline]
-    fn try_from(value: u8) -> Result<Self, Self::Error> {
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
         if value <= Self::MAX {
             Ok(Self(value))
         } else {
@@ -85,20 +85,20 @@ impl TryFrom<u8> for Second {
         }
     }
 }
-impl PartialEq<u8> for Second {
+impl PartialEq<u32> for Second {
     #[inline]
-    fn eq(&self, other: &u8) -> bool {
+    fn eq(&self, other: &u32) -> bool {
         &self.0 == other
     }
 }
 
 /// A minute value, 0-59
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Minute(u8);
+pub struct Minute(u32);
 impl Sealed for Minute {}
 impl ExprValue for Minute {
-    const MAX: u8 = 59;
-    const MIN: u8 = 0;
+    const MAX: u32 = 59;
+    const MIN: u32 = 0;
 
     fn max() -> Self {
         Self(Self::MAX)
@@ -107,18 +107,18 @@ impl ExprValue for Minute {
         Self(Self::MIN)
     }
 }
-impl From<Minute> for u8 {
+impl From<Minute> for u32 {
     /// Returns the value, 0-59
     #[inline]
     fn from(m: Minute) -> Self {
         m.0
     }
 }
-impl TryFrom<u8> for Minute {
+impl TryFrom<u32> for Minute {
     type Error = ValueOutOfRangeError;
 
     #[inline]
-    fn try_from(value: u8) -> Result<Self, Self::Error> {
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
         if value <= Self::MAX {
             Ok(Self(value))
         } else {
@@ -126,20 +126,20 @@ impl TryFrom<u8> for Minute {
         }
     }
 }
-impl PartialEq<u8> for Minute {
+impl PartialEq<u32> for Minute {
     #[inline]
-    fn eq(&self, other: &u8) -> bool {
+    fn eq(&self, other: &u32) -> bool {
         &self.0 == other
     }
 }
 
 /// An hour value, 0-23
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Hour(u8);
+pub struct Hour(u32);
 impl Sealed for Hour {}
 impl ExprValue for Hour {
-    const MAX: u8 = 23;
-    const MIN: u8 = 0;
+    const MAX: u32 = 23;
+    const MIN: u32 = 0;
 
     fn max() -> Self {
         Self(Self::MAX)
@@ -148,18 +148,18 @@ impl ExprValue for Hour {
         Self(Self::MIN)
     }
 }
-impl From<Hour> for u8 {
+impl From<Hour> for u32 {
     #[inline]
     /// Returns the value, 0-23
     fn from(m: Hour) -> Self {
         m.0
     }
 }
-impl TryFrom<u8> for Hour {
+impl TryFrom<u32> for Hour {
     type Error = ValueOutOfRangeError;
 
     #[inline]
-    fn try_from(value: u8) -> Result<Self, Self::Error> {
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
         if value <= Self::MAX {
             Ok(Self(value))
         } else {
@@ -167,20 +167,20 @@ impl TryFrom<u8> for Hour {
         }
     }
 }
-impl PartialEq<u8> for Hour {
+impl PartialEq<u32> for Hour {
     #[inline]
-    fn eq(&self, other: &u8) -> bool {
+    fn eq(&self, other: &u32) -> bool {
         &self.0 == other
     }
 }
 
 /// A day of the month, 1-31
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct DayOfMonth(u8);
+pub struct DayOfMonth(u32);
 impl Sealed for DayOfMonth {}
 impl ExprValue for DayOfMonth {
-    const MAX: u8 = 31;
-    const MIN: u8 = 1;
+    const MAX: u32 = 31;
+    const MIN: u32 = 1;
 
     fn max() -> Self {
         Self(Self::MAX)
@@ -189,18 +189,18 @@ impl ExprValue for DayOfMonth {
         Self(Self::MIN)
     }
 }
-impl From<DayOfMonth> for u8 {
+impl From<DayOfMonth> for u32 {
     #[inline]
     /// Returns the zero based day of the month, 0-30
     fn from(m: DayOfMonth) -> Self {
         m.0 - 1
     }
 }
-impl TryFrom<u8> for DayOfMonth {
+impl TryFrom<u32> for DayOfMonth {
     type Error = ValueOutOfRangeError;
 
     #[inline]
-    fn try_from(value: u8) -> Result<Self, Self::Error> {
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
         if value >= Self::MIN && value <= Self::MAX {
             Ok(Self(value))
         } else {
@@ -208,19 +208,19 @@ impl TryFrom<u8> for DayOfMonth {
         }
     }
 }
-impl PartialEq<u8> for DayOfMonth {
+impl PartialEq<u32> for DayOfMonth {
     #[inline]
-    fn eq(&self, other: &u8) -> bool {
+    fn eq(&self, other: &u32) -> bool {
         &self.0 == other
     }
 }
 /// A last day of the month offset, 1-30
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct DayOfMonthOffset(u8);
+pub struct DayOfMonthOffset(u32);
 impl Sealed for DayOfMonthOffset {}
 impl ExprValue for DayOfMonthOffset {
-    const MAX: u8 = 30;
-    const MIN: u8 = 1;
+    const MAX: u32 = 30;
+    const MIN: u32 = 1;
 
     fn max() -> Self {
         Self(Self::MAX)
@@ -229,18 +229,18 @@ impl ExprValue for DayOfMonthOffset {
         Self(Self::MIN)
     }
 }
-impl From<DayOfMonthOffset> for u8 {
+impl From<DayOfMonthOffset> for u32 {
     #[inline]
     /// Returns the zero based day of the month, 0-30
     fn from(m: DayOfMonthOffset) -> Self {
         m.0
     }
 }
-impl TryFrom<u8> for DayOfMonthOffset {
+impl TryFrom<u32> for DayOfMonthOffset {
     type Error = ValueOutOfRangeError;
 
     #[inline]
-    fn try_from(value: u8) -> Result<Self, Self::Error> {
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
         if value >= Self::MIN && value <= Self::MAX {
             Ok(Self(value))
         } else {
@@ -248,20 +248,20 @@ impl TryFrom<u8> for DayOfMonthOffset {
         }
     }
 }
-impl PartialEq<u8> for DayOfMonthOffset {
+impl PartialEq<u32> for DayOfMonthOffset {
     #[inline]
-    fn eq(&self, other: &u8) -> bool {
+    fn eq(&self, other: &u32) -> bool {
         &self.0 == other
     }
 }
 
 /// A month, 1-12
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Month(u8);
+pub struct Month(u32);
 impl Sealed for Month {}
 impl ExprValue for Month {
-    const MAX: u8 = 12;
-    const MIN: u8 = 1;
+    const MAX: u32 = 12;
+    const MIN: u32 = 1;
 
     fn max() -> Self {
         Self(Self::MAX)
@@ -270,7 +270,7 @@ impl ExprValue for Month {
         Self(Self::MIN)
     }
 }
-impl From<Month> for u8 {
+impl From<Month> for u32 {
     #[inline]
     /// Returns the zero based month, 0-11
     fn from(m: Month) -> Self {
@@ -316,11 +316,11 @@ impl From<Month> for chrono::Month {
         }
     }
 }
-impl TryFrom<u8> for Month {
+impl TryFrom<u32> for Month {
     type Error = ValueOutOfRangeError;
 
     #[inline]
-    fn try_from(value: u8) -> Result<Self, Self::Error> {
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
         if value >= Self::MIN && value <= Self::MAX {
             Ok(Self(value))
         } else {
@@ -328,20 +328,62 @@ impl TryFrom<u8> for Month {
         }
     }
 }
-impl PartialEq<u8> for Month {
+impl PartialEq<u32> for Month {
     #[inline]
-    fn eq(&self, other: &u8) -> bool {
+    fn eq(&self, other: &u32) -> bool {
+        &self.0 == other
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Year(u32);
+impl Sealed for Year {}
+impl ExprValue for Year {
+    const MAX: u32 = 10000;
+    const MIN: u32 = 1;
+
+    fn max() -> Self {
+        Self(Self::MAX)
+    }
+
+    fn min() -> Self {
+        Self(Self::MIN)
+    }
+}
+impl From<Year> for u32 {
+    #[inline]
+    /// Returns the zero based month, 0-11
+    fn from(m: Year) -> Self {
+        m.0 - 1
+    }
+}
+
+impl TryFrom<u32> for Year {
+    type Error = ValueOutOfRangeError;
+
+    #[inline]
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
+        if value >= Self::MIN && value <= Self::MAX {
+            Ok(Self(value))
+        } else {
+            Err(ValueOutOfRangeError)
+        }
+    }
+}
+impl PartialEq<u32> for Year {
+    #[inline]
+    fn eq(&self, other: &u32) -> bool {
         &self.0 == other
     }
 }
 
 /// An "nth" day, 1-5
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct NthDay(u8);
+pub struct NthDay(u32);
 impl Sealed for NthDay {}
 impl ExprValue for NthDay {
-    const MAX: u8 = 5;
-    const MIN: u8 = 1;
+    const MAX: u32 = 5;
+    const MIN: u32 = 1;
 
     fn max() -> Self {
         Self(Self::MAX)
@@ -350,17 +392,17 @@ impl ExprValue for NthDay {
         Self(Self::MIN)
     }
 }
-impl From<NthDay> for u8 {
+impl From<NthDay> for u32 {
     #[inline]
     fn from(m: NthDay) -> Self {
         m.0
     }
 }
-impl TryFrom<u8> for NthDay {
+impl TryFrom<u32> for NthDay {
     type Error = ValueOutOfRangeError;
 
     #[inline]
-    fn try_from(value: u8) -> Result<Self, Self::Error> {
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
         if value >= Self::MIN && value <= Self::MAX {
             Ok(Self(value))
         } else {
@@ -368,9 +410,9 @@ impl TryFrom<u8> for NthDay {
         }
     }
 }
-impl PartialEq<u8> for NthDay {
+impl PartialEq<u32> for NthDay {
     #[inline]
-    fn eq(&self, other: &u8) -> bool {
+    fn eq(&self, other: &u32) -> bool {
         &self.0 == other
     }
 }
@@ -380,8 +422,8 @@ impl PartialEq<u8> for NthDay {
 pub struct DayOfWeek(chrono::Weekday);
 impl Sealed for DayOfWeek {}
 impl ExprValue for DayOfWeek {
-    const MAX: u8 = 7;
-    const MIN: u8 = 1;
+    const MAX: u32 = 7;
+    const MIN: u32 = 1;
 
     fn max() -> Self {
         Self(chrono::Weekday::Sat)
@@ -406,11 +448,11 @@ impl Ord for DayOfWeek {
             .cmp(&other.0.number_from_sunday())
     }
 }
-impl From<DayOfWeek> for u8 {
+impl From<DayOfWeek> for u32 {
     #[inline]
     /// Returns the zero based day of the week, 0-6
     fn from(m: DayOfWeek) -> Self {
-        m.0.num_days_from_sunday() as u8
+        m.0.num_days_from_sunday() as u32
     }
 }
 impl From<chrono::Weekday> for DayOfWeek {
@@ -425,11 +467,11 @@ impl From<DayOfWeek> for chrono::Weekday {
         w
     }
 }
-impl TryFrom<u8> for DayOfWeek {
+impl TryFrom<u32> for DayOfWeek {
     type Error = ValueOutOfRangeError;
 
     #[inline]
-    fn try_from(value: u8) -> Result<Self, Self::Error> {
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
         use chrono::Weekday::*;
 
         Ok(Self(match value {
@@ -470,15 +512,15 @@ impl PartialEq<chrono::Weekday> for DayOfWeek {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Step<E> {
     e: PhantomData<fn(E) -> E>,
-    value: u8,
+    value: u32,
 }
 impl<E: Sealed> Sealed for Step<E> {}
 impl<E: ExprValue> ExprValue for Step<E> {
-    const MAX: u8 = E::MAX - E::MIN;
+    const MAX: u32 = E::MAX - E::MIN;
     // This assumes every MIN value is 0 or 1. If that changes this breaks and it's the
     // problem of whoever reads this. Hopefully the const-eval story of Rust is better
     // when you're fixing this
-    const MIN: u8 = E::MIN | 1;
+    const MIN: u32 = E::MIN | 1;
 
     fn max() -> Self {
         Self {
@@ -493,17 +535,17 @@ impl<E: ExprValue> ExprValue for Step<E> {
         }
     }
 }
-impl<E> From<Step<E>> for u8 {
+impl<E> From<Step<E>> for u32 {
     #[inline]
     fn from(s: Step<E>) -> Self {
         s.value
     }
 }
-impl<E: ExprValue> TryFrom<u8> for Step<E> {
+impl<E: ExprValue> TryFrom<u32> for Step<E> {
     type Error = ValueOutOfRangeError;
 
     #[inline]
-    fn try_from(value: u8) -> Result<Self, Self::Error> {
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
         if value >= Self::MIN && value <= Self::MAX {
             Ok(Self {
                 e: PhantomData,
@@ -604,7 +646,9 @@ impl<E: Copy + ExprValue + PartialEq> OrsExpr<E> {
             | OrsExpr::Step {
                 start: a, end: b, ..
             } if a == b => OrsExpr::One(a),
-            OrsExpr::Step { step, start, end } if u8::from(step) == 1 => OrsExpr::Range(start, end),
+            OrsExpr::Step { step, start, end } if u32::from(step) == 1 => {
+                OrsExpr::Range(start, end)
+            }
             x => x,
         }
     }
@@ -681,6 +725,8 @@ pub struct CronExpr {
     pub months: Expr<Month>,
     /// The day of the week part of the expression.
     pub dows: DayOfWeekExpr,
+    // The year of the expression
+    pub years: Expr<Year>,
 }
 
 /// A formatter for displaying a cron expression description in a specified language
@@ -730,7 +776,7 @@ impl std::error::Error for CronParseError {}
 /// A parser that can parse a single value, a range of values, or a step expression
 fn ors_expr<E, F>(f: F) -> impl Fn(&str) -> IResult<&str, OrsExpr<E>>
 where
-    E: ExprValue + TryFrom<u8, Error = ValueOutOfRangeError> + Ord + Copy,
+    E: ExprValue + TryFrom<u32, Error = ValueOutOfRangeError> + Ord + Copy,
     F: Fn(&str) -> IResult<&str, E>,
 {
     move |input: &str| {
@@ -764,7 +810,7 @@ fn tail_ors_exprs<'a, E, F>(
     mut exprs: Exprs<E>,
 ) -> IResult<&'a str, Exprs<E>>
 where
-    E: ExprValue + TryFrom<u8, Error = ValueOutOfRangeError> + Ord + Copy,
+    E: ExprValue + TryFrom<u32, Error = ValueOutOfRangeError> + Ord + Copy,
     F: Fn(&str) -> IResult<&str, E>,
 {
     loop {
@@ -784,7 +830,7 @@ where
 /// This can't parse day of the month or week expressions.
 fn expr<E, F>(f: F) -> impl Fn(&str) -> IResult<&str, Expr<E>>
 where
-    E: ExprValue + TryFrom<u8, Error = ValueOutOfRangeError> + Ord + Copy,
+    E: ExprValue + TryFrom<u32, Error = ValueOutOfRangeError> + Ord + Copy,
     F: Fn(&str) -> IResult<&str, E>,
 {
     move |mut input: &str| {
@@ -826,12 +872,12 @@ where
 #[inline]
 fn map_digit1<E>() -> impl Fn(&str) -> IResult<&str, E>
 where
-    E: ExprValue + TryFrom<u8, Error = ValueOutOfRangeError>,
+    E: ExprValue + TryFrom<u32, Error = ValueOutOfRangeError>,
 {
     move |input: &str| {
         map_res(digit1, |s: &str| {
             let value = s
-                .parse::<u8>()
+                .parse::<u32>()
                 // discard error, we won't see it anyway
                 .map_err(|_| ValueOutOfRangeError)?;
 
@@ -881,6 +927,7 @@ fn hours_expr(s: &str) -> IResult<&str, Expr<Hour>> {
     expr(map_digit1())(s)
 }
 
+#[inline]
 fn dom_expr(input: &str) -> IResult<&str, DayOfMonthExpr> {
     let dom = map_digit1::<DayOfMonth>();
 
@@ -970,9 +1017,10 @@ fn months_expr(s: &str) -> IResult<&str, Expr<Month>> {
     expr(month)(s)
 }
 
+#[inline]
 fn dow_expr(input: &str) -> IResult<&str, DayOfWeekExpr> {
     fn dow(s: &str) -> IResult<&str, DayOfWeek> {
-        alt((
+        let ret = alt((
             map_digit1::<DayOfWeek>(),
             map(tag_no_case("SUN"), |_| DayOfWeek(chrono::Weekday::Sun)),
             map(tag_no_case("MON"), |_| DayOfWeek(chrono::Weekday::Mon)),
@@ -981,7 +1029,8 @@ fn dow_expr(input: &str) -> IResult<&str, DayOfWeekExpr> {
             map(tag_no_case("THU"), |_| DayOfWeek(chrono::Weekday::Thu)),
             map(tag_no_case("FRI"), |_| DayOfWeek(chrono::Weekday::Fri)),
             map(tag_no_case("SAT"), |_| DayOfWeek(chrono::Weekday::Sat)),
-        ))(s)
+        ))(s);
+        ret
     }
 
     let (input, start) = opt(alt((char('*'), char('L'))))(input)?;
@@ -1056,6 +1105,11 @@ fn dow_expr(input: &str) -> IResult<&str, DayOfWeekExpr> {
     }
 }
 
+#[inline]
+fn years_expr(s: &str) -> IResult<&str, Expr<Year>> {
+    expr(map_digit1())(s)
+}
+
 impl FromStr for CronExpr {
     type Err = CronParseError;
 
@@ -1074,14 +1128,17 @@ impl FromStr for CronExpr {
                 months_expr,
                 space1,
                 dow_expr,
+                space1,
+                years_expr,
             )),
-            |(seconds, _, minutes, _, hours, _, doms, _, months, _, dows)| CronExpr {
+            |(seconds, _, minutes, _, hours, _, doms, _, months, _, dows, _, years)| CronExpr {
                 seconds,
                 minutes,
                 hours,
                 doms,
                 months,
                 dows,
+                years,
             },
         ))(s)
         .map_err(|_| CronParseError(()))?;
@@ -1110,25 +1167,25 @@ mod tests {
         Exprs { first, tail }
     }
 
-    fn e<E>(value: u8) -> E
+    fn e<E>(value: u32) -> E
     where
-        E: TryFrom<u8>,
+        E: TryFrom<u32>,
         E::Error: Debug,
     {
         E::try_from(value).unwrap()
     }
 
-    fn o<E>(value: u8) -> OrsExpr<E>
+    fn o<E>(value: u32) -> OrsExpr<E>
     where
-        E: TryFrom<u8>,
+        E: TryFrom<u32>,
         E::Error: Debug,
     {
         OrsExpr::One(e(value))
     }
 
-    fn r<E>(start: u8, end: u8) -> OrsExpr<E>
+    fn r<E>(start: u32, end: u32) -> OrsExpr<E>
     where
-        E: TryFrom<u8>,
+        E: TryFrom<u32>,
         E::Error: Debug,
     {
         let start = e(start);
@@ -1136,9 +1193,9 @@ mod tests {
         OrsExpr::Range(start, end)
     }
 
-    fn s<E>(value: u8, step: u8) -> OrsExpr<E>
+    fn s<E>(value: u32, step: u32) -> OrsExpr<E>
     where
-        E: TryFrom<u8> + ExprValue,
+        E: TryFrom<u32> + ExprValue,
         E::Error: Debug,
     {
         let start = e(value);
@@ -1150,9 +1207,9 @@ mod tests {
         }
     }
 
-    fn rs<E>(start: u8, end: u8, step: u8) -> OrsExpr<E>
+    fn rs<E>(start: u32, end: u32, step: u32) -> OrsExpr<E>
     where
-        E: TryFrom<u8> + ExprValue,
+        E: TryFrom<u32> + ExprValue,
         E::Error: Debug,
     {
         let start = e(start);
