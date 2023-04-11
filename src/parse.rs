@@ -567,6 +567,8 @@ pub enum DayOfWeekExpr {
     Last(DayOfWeek),
     /// A '#' character
     Nth(DayOfWeek, NthDay),
+    /// A '?' character
+    Any,
     /// Possibly multiple unique, ranges, or steps
     Many(Exprs<DayOfWeek>),
 }
@@ -599,6 +601,8 @@ pub enum DayOfMonthExpr {
     Last(Last),
     /// A 'W' expression, used to mean the closest weekday to the specified day of the month
     ClosestWeekday(DayOfMonth),
+    /// A '?' character
+    Any,
     /// Possibly multiple unique, ranges, or steps
     Many(Exprs<DayOfMonth>),
 }
@@ -949,6 +953,7 @@ fn dom_expr(input: &str) -> IResult<&str, DayOfMonthExpr> {
                 Ok((input, DayOfMonthExpr::All))
             }
         }
+        Some('?') => Ok((input, DayOfMonthExpr::Any)),
         Some('L') => {
             let (input, modifier) = opt(alt((char('-'), char('W'))))(input)?;
             match modifier {
@@ -1051,6 +1056,7 @@ fn dow_expr(input: &str) -> IResult<&str, DayOfWeekExpr> {
                 Ok((input, DayOfWeekExpr::All))
             }
         }
+        Some('?') => Ok((input, DayOfWeekExpr::Any)),
         Some('L') => Ok((
             input,
             DayOfWeekExpr::Many(Exprs::new(OrsExpr::One(DayOfWeek(chrono::Weekday::Sat)))),

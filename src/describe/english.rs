@@ -313,6 +313,7 @@ impl Language for English {
                 " on the closest weekday to the {} to last day",
                 postfixed(u32::from(offset) + 1)
             )?,
+            DayOfMonthExpr::Any => write!(f, " on any day")?,
             DayOfMonthExpr::Many(Exprs { first, tail }) => {
                 let first = first.normalize();
                 match tail.as_slice() {
@@ -341,6 +342,7 @@ impl Language for English {
 
         match &expr.dows {
             DayOfWeekExpr::All => {}
+            DayOfWeekExpr::Any => write!(f, " on any day")?,
             &DayOfWeekExpr::Last(day) => write!(f, " on the last {}", weekday(day))?,
             &DayOfWeekExpr::Nth(day, nth) => {
                 write!(f, " on the {} {}", postfixed(u32::from(nth)), weekday(day))?

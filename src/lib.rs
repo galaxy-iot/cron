@@ -72,6 +72,8 @@ enum DaysOfWeekKind {
     /// A '#' expression for an nth day of the month. One day and one nth value is paired making it
     /// easier to access
     Nth,
+    /// A '?' expression
+    Any,
 }
 
 /// A bit-mask of all the days of the week set in a cron expression.
@@ -92,6 +94,7 @@ impl TimePattern for DaysOfWeek {
                 DaysOfWeekKind::Pattern,
                 exprs.into_iter().fold(0, Self::add_ors),
             ),
+            parse::DayOfWeekExpr::Any => Self(DaysOfWeekKind::Any, 0),
         }
     }
     #[inline]
@@ -640,6 +643,7 @@ enum DaysOfMonthKind {
     Last,
     Weekday,
     LastWeekday,
+    Any,
 }
 
 /// A bit-mask of all the days of the month set in a cron expression.
@@ -667,6 +671,7 @@ impl TimePattern for DaysOfMonth {
                 DaysOfMonthKind::Pattern,
                 exprs.into_iter().fold(0, Self::add_ors),
             ),
+            DayOfMonthExpr::Any => Self(DaysOfMonthKind::Any, 0),
         }
     }
 
@@ -1359,12 +1364,8 @@ impl Cron {
             }
         }
 
-        println!("not contains date");
-
         let midnight = NaiveTime::from_hms(0, 0, 0);
         let mut search_date = start.date().succ_opt().filter(|&t| t <= end.date())?;
-
-        println!("{:?}", search_date);
 
         loop {
             match self.find_next_date(search_date, end.date()) {
@@ -1839,7 +1840,7 @@ mod tests {
 
     #[test]
     fn get_next() {
-        let cron = "* * 20 15 4 * 2023";
+        let cron = "* * 20 15 4 * 2024";
         let parsed = cron.parse::<Cron>().unwrap();
         let local = Utc::now();
         println!("{:?}", local);
