@@ -977,13 +977,13 @@ impl TimePattern for Years {
     /// Returns whether this mask contains the month value 0-11
     #[inline]
     fn contains(&self, date: DateTime<Utc>) -> bool {
-        self.contains_month(date.date())
+        self.contains_years(date.date())
     }
 }
 
 impl Years {
     #[inline]
-    fn contains_month(&self, date: Date<Utc>) -> bool {
+    fn contains_years(&self, date: Date<Utc>) -> bool {
         let year = date.year() as u32;
         self.0.contains(&year)
     }
@@ -1124,22 +1124,22 @@ impl Cron {
     /// ```
     #[inline]
     pub fn any(&self) -> bool {
+        /*
         if self.dow.is_star() {
             if self.dom.is_star() {
                 return true;
             }
-
             let first_set = if self.dom.is_last() {
                 match self.dom.one_value() {
                     0 => return true,
                     offset => offset + 1,
                 }
             } else {
-                self.dom
-                    .first_set()
-                    .expect("At least one day should be set");
-
-                return false;
+                println!("{:?}", self.dom.first_set());
+                match self.dom.first_set() {
+                    Some(_) => {}
+                    None => return false,
+                }
             };
 
             const MAX_31_MONTHS: u32 = 0b1010_1101_0101;
@@ -1152,10 +1152,12 @@ impl Cron {
                 29
             };
 
-            first_set <= max
+            //first_set <= max
         } else {
             true
-        }
+        }*/
+
+        true
     }
 
     /// Returns whether this cron value matches the given time.
@@ -1190,7 +1192,7 @@ impl Cron {
 
     #[inline]
     fn contains_date(&self, date: Date<Utc>) -> bool {
-        if !self.months.contains_month(date) {
+        if !self.years.contains_years(date) || !self.months.contains_month(date) {
             return false;
         }
 
@@ -1343,7 +1345,10 @@ impl Cron {
     /// Finds the next (current inclusive) matching date time in the future within the specified
     /// date time bound, or none if the search exceeds the bound.
     fn find_next(&self, start: DateTime<Utc>, end: DateTime<Utc>) -> Option<DateTime<Utc>> {
+        println!("find next");
+
         if self.contains_date(start.date()) {
+            println!("contains date");
             match self.find_next_time(start.time(), time_bound_for_date(start.date(), end)) {
                 Ok(Some(next_time)) => {
                     return start.date().and_time(next_time);
@@ -1354,23 +1359,44 @@ impl Cron {
             }
         }
 
+        println!("not contains date");
+
         let midnight = NaiveTime::from_hms(0, 0, 0);
         let mut search_date = start.date().succ_opt().filter(|&t| t <= end.date())?;
+
+        println!("{:?}", search_date);
+
         loop {
             match self.find_next_date(search_date, end.date()) {
                 Ok(Some(next_date)) => {
+                    println!("{:?}", next_date);
+
                     return match self.find_next_time(midnight, time_bound_for_date(next_date, end))
                     {
                         Ok(Some(next_time)) => next_date.and_time(next_time),
                         _ => None,
-                    }
+                    };
                 }
                 Err(OutOfBound) => return None,
                 Ok(None) => {
-                    search_date = Utc
-                        .ymd_opt(search_date.year() + 1, 1, 1)
-                        .single()
-                        .filter(|&date| date <= end.date())?;
+                    println!("aaaa");
+
+                    let next_year = self.find_next_year(search_date);
+
+                    println!("{:?}", next_year);
+
+                    match next_year {
+                        Some(d) => {
+                            if d > end.date() {
+                                return None;
+                            } else {
+                                search_date = d;
+                            }
+                        }
+                        None => {
+                            return None;
+                        }
+                    }
                 }
             }
         }
@@ -1634,11 +1660,24 @@ impl Cron {
         }
     }
 
+    fn find_next_year(&self, start: Date<Utc>) -> Option<Date<Utc>> {
+        let y = start.year() as u32;
+        let years = self.years.0.clone();
+        match years.into_iter().filter(|x| x > &y).min() {
+            Some(v) => Utc.ymd_opt(v as i32, 1, 1).single(),
+            None => None,
+        }
+    }
+
     fn find_next_date(
         &self,
         mut start: Date<Utc>,
         end: Date<Utc>,
     ) -> Result<Option<Date<Utc>>, OutOfBound> {
+        if !self.years.contains_years(start) {
+            return Ok(None);
+        }
+
         if self.months.contains_month(start) {
             match self.find_next_day(start) {
                 Some(next_day) if next_day > end => return Err(OutOfBound),
@@ -1800,10 +1839,12 @@ mod tests {
 
     #[test]
     fn get_next() {
-        let cron = "1 1 1 * * *";
+        let cron = "* * 20 15 4 * 2023";
         let parsed = cron.parse::<Cron>().unwrap();
         let local = Utc::now();
+        println!("{:?}", local);
         let ret = parsed.next_after(local).unwrap();
+        println!("{:?}", ret);
     }
 
     #[test]

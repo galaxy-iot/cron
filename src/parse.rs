@@ -354,7 +354,7 @@ impl From<Year> for u32 {
     #[inline]
     /// Returns the zero based month, 0-11
     fn from(m: Year) -> Self {
-        m.0 - 1
+        m.0
     }
 }
 
