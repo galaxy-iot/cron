@@ -1333,7 +1333,6 @@ impl Cron {
     #[inline]
     pub fn next_after(&self, start: DateTime<Utc>) -> Option<DateTime<Utc>> {
         let start = next_second(second_floor(start))?;
-        println!("{:?}", start);
         if self.any() {
             self.find_next(start, chrono::MAX_DATETIME)
         } else {
@@ -1415,7 +1414,6 @@ impl Cron {
     /// no upcoming hour in the day matches.
     fn find_next_hour(&self, start: NaiveTime) -> Option<NaiveTime> {
         let Hours(map) = self.hours;
-        println!("{:?}", self.hours);
         let current_hour = start.hour();
         let bottom_cleared = (map >> current_hour) << current_hour;
         let trailing_zeros = bottom_cleared.trailing_zeros();
@@ -1805,9 +1803,7 @@ mod tests {
         let cron = "1 1 1 * * *";
         let parsed = cron.parse::<Cron>().unwrap();
         let local = Utc::now();
-        println!("{:?}", local);
         let ret = parsed.next_after(local).unwrap();
-        println!("{:?}", ret)
     }
 
     #[test]
