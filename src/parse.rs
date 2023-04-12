@@ -24,8 +24,6 @@ use nom::{
 #[cfg(feature = "std")]
 use std::vec;
 
-pub use crate::describe::*;
-
 /// An error returned if an expression type value is out of range.
 #[derive(Debug)]
 pub struct ValueOutOfRangeError;
@@ -734,34 +732,8 @@ pub struct CronExpr {
 }
 
 /// A formatter for displaying a cron expression description in a specified language
-#[derive(Debug, Clone, Copy)]
-pub struct LanguageFormatter<'a, L> {
-    expr: &'a CronExpr,
-    lang: L,
-}
 
-impl<'a, L: Language> Display for LanguageFormatter<'a, L> {
-    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        self.lang.fmt_expr(self.expr, f)
-    }
-}
-
-impl CronExpr {
-    /// Returns a formatter to display the cron expression in the provided language
-    ///
-    /// # Example
-    /// ```
-    /// use saffron::parse::{CronExpr, English};
-    ///
-    /// let cron: CronExpr = "* * * * *".parse().expect("Valid cron expression");
-    ///
-    /// let description = cron.describe(English::default()).to_string();
-    /// assert_eq!("Every minute", description);
-    /// ```
-    pub fn describe<L: Language>(&self, lang: L) -> LanguageFormatter<L> {
-        LanguageFormatter { expr: self, lang }
-    }
-}
+impl CronExpr {}
 
 /// An error indicating that the provided cron expression failed to parse
 #[derive(Debug)]
