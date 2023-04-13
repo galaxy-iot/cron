@@ -4,25 +4,47 @@ use chrono::Utc;
 use priority_queue::PriorityQueue;
 use std::cmp::{Ord, PartialOrd};
 use std::collections::HashMap;
+use std::time::Duration;
 
 pub trait Trigger {
-    fn get_next(&self) -> i64;
+    fn get_next(&self, from: u64) -> u64;
     fn get_id(&self) -> String;
+}
+
+pub struct EveryTrigger {
+    interval: Duration,
+    id: String,
+}
+
+impl EveryTrigger {
+    fn new(interval: Duration, id: String) -> Self {
+        Self { interval, id }
+    }
+}
+
+impl Trigger for EveryTrigger {
+    fn get_next(&self, from: u64) -> u64 {
+        self.interval.as_secs() + from
+    }
+
+    fn get_id(&self) -> String {
+        return self.id.clone();
+    }
 }
 
 pub struct Scheduler<T: Trigger> {
     triggers: HashMap<String, T>,
-    queue: PriorityQueue<String, i64>,
-    sender: Sender<i64>,
-    receiver: Receiver<i64>,
+    queue: PriorityQueue<String, u64>,
+    sender: Sender<u64>,
+    receiver: Receiver<u64>,
     stop: bool,
 }
 
 impl<T: Trigger + std::cmp::Ord> Scheduler<T> {
     fn new() -> Self {
-        let queue = PriorityQueue::<String, i64>::new();
+        let queue = PriorityQueue::<String, u64>::new();
         let triggers = HashMap::<String, T>::new();
-        let (sender, receiver) = async_channel::bounded::<i64>(128);
+        let (sender, receiver) = async_channel::bounded::<u64>(128);
         Self {
             triggers,
             queue,
@@ -33,7 +55,7 @@ impl<T: Trigger + std::cmp::Ord> Scheduler<T> {
     }
 
     fn add_job(&mut self, job: T) {
-        let next_firetime = job.get_next();
+        let next_firetime = job.get_next(Utc::now().timestamp() as u64);
         self.queue.push(job.get_id(), next_firetime);
     }
 
@@ -42,7 +64,7 @@ impl<T: Trigger + std::cmp::Ord> Scheduler<T> {
         self.triggers.remove(&id);
     }
 
-    fn get_receiver(&self) -> Receiver<i64> {
+    fn get_receiver(&self) -> Receiver<u64> {
         return self.receiver.clone();
     }
 
@@ -56,14 +78,14 @@ impl<T: Trigger + std::cmp::Ord> Scheduler<T> {
             match t {
                 Some(job) => {
                     let job_id = job.0;
-                    let t = job.1;
-                    _ = self.sender.send(t).await;
+                    let last_fire_time = job.1;
+                    _ = self.sender.send(last_fire_time).await;
 
-                    let trigger = self.triggers.get(&job_id);
+                    let trigger_opt = self.triggers.get(&job_id);
 
-                    match trigger {
-                        Some(t) => {
-                            let next_firetime = t.get_next();
+                    match trigger_opt {
+                        Some(tigger) => {
+                            let next_firetime = tigger.get_next(last_fire_time);
                             self.queue.push(job_id, next_firetime);
                         }
                         None => continue,

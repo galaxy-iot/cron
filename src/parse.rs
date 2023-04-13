@@ -430,6 +430,7 @@ impl ExprValue for DayOfWeek {
         Self(chrono::Weekday::Sun)
     }
 }
+
 impl PartialOrd for DayOfWeek {
     #[inline]
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
@@ -438,6 +439,7 @@ impl PartialOrd for DayOfWeek {
             .partial_cmp(&other.0.number_from_sunday())
     }
 }
+
 impl Ord for DayOfWeek {
     #[inline]
     fn cmp(&self, other: &Self) -> Ordering {
@@ -907,7 +909,8 @@ fn hours_expr(s: &str) -> IResult<&str, Expr<Hour>> {
 fn dom_expr(input: &str) -> IResult<&str, DayOfMonthExpr> {
     let dom = map_digit1::<DayOfMonth>();
 
-    let (input, start) = opt(alt((char('*'), char('L'))))(input)?;
+    let (input, start) = opt(alt((char('?'), char('*'), char('L'))))(input)?;
+
     match start {
         Some('*') => {
             let (input, maybe_step) = opt(tuple((char('/'), step_digit::<DayOfMonth>())))(input)?;
@@ -1010,7 +1013,7 @@ fn dow_expr(input: &str) -> IResult<&str, DayOfWeekExpr> {
         ret
     }
 
-    let (input, start) = opt(alt((char('*'), char('L'))))(input)?;
+    let (input, start) = opt(alt((char('?'), char('*'), char('L'))))(input)?;
 
     match start {
         Some('*') => {
@@ -1093,7 +1096,7 @@ impl FromStr for CronExpr {
 
     #[inline]
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let (_, expr) = all_consuming(map(
+        let ret = all_consuming(map(
             tuple((
                 seconds_expr,
                 space1,
@@ -1118,8 +1121,26 @@ impl FromStr for CronExpr {
                 dows,
                 years,
             },
-        ))(s)
-        .map_err(|_| CronParseError(()))?;
+        ))(s);
+
+        match ret {
+            Ok((_, expr)) => Self::check(expr),
+            Err(_) => return Err(CronParseError(())),
+        }
+    }
+}
+
+impl CronExpr {
+    fn check(expr: CronExpr) -> Result<Self, CronParseError> {
+        let cloned_expr = expr.clone();
+
+        // check day of month and day of weekday
+        match (cloned_expr.doms, cloned_expr.dows) {
+            (DayOfMonthExpr::Any, DayOfWeekExpr::Any) => {}
+            (DayOfMonthExpr::Any, _) => {}
+            (_, DayOfWeekExpr::Any) => {}
+            (_, _) => return Err(CronParseError(())),
+        }
 
         Ok(expr)
     }
@@ -1194,6 +1215,162 @@ mod tests {
         let end = e(end);
         let step = e(step);
         OrsExpr::Step { start, end, step }
+    }
+
+    mod cron {
+        use super::*;
+
+        struct Cron {
+            cron_str: String,
+            ret: bool,
+        }
+
+        fn test_crons(crons: Vec<Cron>) {
+            for cron in crons {
+                let ret = cron.cron_str.parse::<CronExpr>().is_ok();
+                assert_eq!(ret, cron.ret);
+            }
+        }
+
+        #[test]
+        fn parse_second() {
+            let crons: Vec<Cron> = vec![
+                Cron {
+                    cron_str: String::from("* * * * * * *"),
+                    ret: false,
+                },
+                Cron {
+                    cron_str: String::from("1 * * * * ? *"),
+                    ret: true,
+                },
+                Cron {
+                    cron_str: String::from("0/1 * * * * ? *"),
+                    ret: true,
+                },
+                Cron {
+                    cron_str: String::from("*/1 * * * * ? *"),
+                    ret: true,
+                },
+                Cron {
+                    cron_str: String::from("1-10 * * * * ? *"),
+                    ret: true,
+                },
+                Cron {
+                    cron_str: String::from("1,2,3,10 * * * * ? *"),
+                    ret: true,
+                },
+                Cron {
+                    cron_str: String::from("60 * * * * ? *"),
+                    ret: false,
+                },
+            ];
+
+            test_crons(crons)
+        }
+
+        #[test]
+        fn parse_minute() {
+            let crons: Vec<Cron> = vec![
+                Cron {
+                    cron_str: String::from("* 60 * * * ? *"),
+                    ret: false,
+                },
+                Cron {
+                    cron_str: String::from("* 1 * * * ? *"),
+                    ret: true,
+                },
+                Cron {
+                    cron_str: String::from("* 1/2 * * * ? *"),
+                    ret: true,
+                },
+                Cron {
+                    cron_str: String::from("* 1,2 * * * ? *"),
+                    ret: true,
+                },
+                Cron {
+                    cron_str: String::from("* */2 * * * ? *"),
+                    ret: true,
+                },
+            ];
+
+            test_crons(crons)
+        }
+
+        #[test]
+        fn parse_hour() {
+            let crons: Vec<Cron> = vec![
+                Cron {
+                    cron_str: String::from("* * 60 * * ? *"),
+                    ret: false,
+                },
+                Cron {
+                    cron_str: String::from("* * 1 * * ? *"),
+                    ret: true,
+                },
+                Cron {
+                    cron_str: String::from("* * 1/2 * * ? *"),
+                    ret: true,
+                },
+                Cron {
+                    cron_str: String::from("* * 1,2 * * ? *"),
+                    ret: true,
+                },
+                Cron {
+                    cron_str: String::from("* * */2 * * ? *"),
+                    ret: true,
+                },
+            ];
+
+            test_crons(crons)
+        }
+
+        #[test]
+        fn parse_day() {
+            let crons: Vec<Cron> = vec![
+                Cron {
+                    cron_str: String::from("* * * 1 * ? *"),
+                    ret: true,
+                },
+                Cron {
+                    cron_str: String::from("* * * 31 * ? *"),
+                    ret: true,
+                },
+                Cron {
+                    cron_str: String::from("* * * 1/2 * ? *"),
+                    ret: true,
+                },
+                Cron {
+                    cron_str: String::from("* * * 1,2 * ? *"),
+                    ret: true,
+                },
+                Cron {
+                    cron_str: String::from("* * * */2 * ? *"),
+                    ret: true,
+                },
+                Cron {
+                    cron_str: String::from("* * * L * ? *"),
+                    ret: true,
+                },
+                Cron {
+                    cron_str: String::from("* * * W * ? *"),
+                    ret: false,
+                },
+                Cron {
+                    cron_str: String::from("* * * LW * ? *"),
+                    ret: true,
+                },
+                Cron {
+                    cron_str: String::from("* * * 1W * ? *"),
+                    ret: true,
+                },
+                Cron {
+                    cron_str: String::from("* * * 1-W * ? *"),
+                    ret: true,
+                },
+            ];
+
+            test_crons(crons)
+        }
     }
 
     mod minutes {
