@@ -11,13 +11,9 @@ version = "0.1.0"
 default = []
 std = []
 
-[[bench]]
-harness = false
-name = "cron"
-
 [[example]]
-name = "future-times"
-required-features = ["chrono/clock"]
+name = "scheduler"
+path = "examples/scheduler.rs"
 
 [dependencies]
 chrono = "0.4.24"

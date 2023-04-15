@@ -1,8 +1,6 @@
 use async_channel::{Receiver, Sender};
-use chrono::DateTime;
 use chrono::Utc;
 use priority_queue::PriorityQueue;
-use std::cmp::{Ord, PartialOrd};
 use std::collections::HashMap;
 use std::time::Duration;
 
