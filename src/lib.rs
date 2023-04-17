@@ -1350,10 +1350,7 @@ impl Cron {
     /// Finds the next (current inclusive) matching date time in the future within the specified
     /// date time bound, or none if the search exceeds the bound.
     fn find_next(&self, start: DateTime<Utc>, end: DateTime<Utc>) -> Option<DateTime<Utc>> {
-        println!("find next");
-
         if self.contains_date(start.date()) {
-            println!("contains date");
             match self.find_next_time(start.time(), time_bound_for_date(start.date(), end)) {
                 Ok(Some(next_time)) => {
                     return start.date().and_time(next_time);

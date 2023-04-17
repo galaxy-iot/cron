@@ -1,8 +1,10 @@
+use crate::parse::CronParseError;
+use crate::Cron;
 use async_channel::{Receiver, Sender};
-use chrono::Utc;
+use chrono::{DateTime, NaiveDateTime, Utc};
 use priority_queue::PriorityQueue;
 use std::collections::HashMap;
-use std::time::Duration;
+use tokio::time::{sleep, Duration};
 
 pub trait Trigger {
     fn get_next(&self, from: u64) -> u64;
@@ -15,7 +17,7 @@ pub struct EveryTrigger {
 }
 
 impl EveryTrigger {
-    fn new(interval: Duration, id: String) -> Self {
+    pub fn new(interval: Duration, id: String) -> Self {
         Self { interval, id }
     }
 }
@@ -23,6 +25,35 @@ impl EveryTrigger {
 impl Trigger for EveryTrigger {
     fn get_next(&self, from: u64) -> u64 {
         self.interval.as_secs() + from
+    }
+
+    fn get_id(&self) -> String {
+        return self.id.clone();
+    }
+}
+
+pub struct CronTrigger {
+    id: String,
+    cron: Cron,
+}
+
+impl CronTrigger {
+    fn new(id: String, cron: &str) -> Result<Self, CronParseError> {
+        let opt = cron.parse::<Cron>();
+
+        match opt {
+            Ok(expr) => Ok(CronTrigger { id: id, cron: expr }),
+            Err(e) => Err(e),
+        }
+    }
+}
+
+impl Trigger for CronTrigger {
+    fn get_next(&self, from: u64) -> u64 {
+        let naive = NaiveDateTime::from_timestamp_millis(from as i64).unwrap();
+        let datetime: DateTime<Utc> = DateTime::from_utc(naive, Utc);
+        let next = self.cron.next_after(datetime).unwrap();
+        next.timestamp_millis() as u64
     }
 
     fn get_id(&self) -> String {
@@ -38,8 +69,8 @@ pub struct Scheduler<T: Trigger> {
     stop: bool,
 }
 
-impl<T: Trigger + std::cmp::Ord> Scheduler<T> {
-    fn new() -> Self {
+impl<T: Trigger> Scheduler<T> {
+    pub fn new() -> Self {
         let queue = PriorityQueue::<String, u64>::new();
         let triggers = HashMap::<String, T>::new();
         let (sender, receiver) = async_channel::bounded::<u64>(128);
@@ -52,27 +83,32 @@ impl<T: Trigger + std::cmp::Ord> Scheduler<T> {
         }
     }
 
-    fn add_job(&mut self, job: T) {
+    pub fn add_job(&mut self, job: T) {
         let next_firetime = job.get_next(Utc::now().timestamp() as u64);
-        self.queue.push(job.get_id(), next_firetime);
+        let id = job.get_id();
+        self.triggers.insert(id.clone(), job);
+        self.queue.push(id, next_firetime);
     }
 
-    fn remove_job(&mut self, id: String) {
+    pub fn remove_job(&mut self, id: String) {
         self.queue.remove(&id);
         self.triggers.remove(&id);
     }
 
-    fn get_receiver(&self) -> Receiver<u64> {
+    pub fn get_receiver(&self) -> Receiver<u64> {
         return self.receiver.clone();
     }
 
-    async fn start(&mut self) {
+    pub async fn start(&mut self) {
         loop {
             if self.stop {
                 return;
             }
 
             let t = self.queue.pop();
+
+            let sleep_interval = Duration::from_millis(500);
+
             match t {
                 Some(job) => {
                     let job_id = job.0;
@@ -86,15 +122,17 @@ impl<T: Trigger + std::cmp::Ord> Scheduler<T> {
                             let next_firetime = tigger.get_next(last_fire_time);
                             self.queue.push(job_id, next_firetime);
                         }
-                        None => continue,
+                        None => {}
                     }
                 }
                 None => {}
             }
+
+            sleep(sleep_interval).await;
         }
     }
 
-    async fn stop(&mut self) {
+    pub async fn stop(&mut self) {
         self.stop = true
     }
 }
