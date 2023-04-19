@@ -3,6 +3,7 @@ use crate::Cron;
 use async_channel::{Receiver, Sender};
 use chrono::{DateTime, NaiveDateTime, Utc};
 use priority_queue::PriorityQueue;
+use std::cmp::Reverse;
 use std::collections::HashMap;
 use tokio::time::{sleep, Duration};
 
@@ -24,7 +25,7 @@ impl EveryTrigger {
 
 impl Trigger for EveryTrigger {
     fn get_next(&self, from: u64) -> u64 {
-        self.interval.as_secs() + from
+        self.interval.as_millis() as u64 + from
     }
 
     fn get_id(&self) -> String {
@@ -38,7 +39,7 @@ pub struct CronTrigger {
 }
 
 impl CronTrigger {
-    fn new(id: String, cron: &str) -> Result<Self, CronParseError> {
+    pub fn new(id: String, cron: &str) -> Result<Self, CronParseError> {
         let opt = cron.parse::<Cron>();
 
         match opt {
@@ -61,18 +62,18 @@ impl Trigger for CronTrigger {
     }
 }
 
-pub struct Scheduler<T: Trigger> {
-    triggers: HashMap<String, T>,
-    queue: PriorityQueue<String, u64>,
+pub struct Scheduler {
+    triggers: HashMap<String, Box<dyn Trigger>>,
+    queue: PriorityQueue<String, Reverse<u64>>,
     sender: Sender<u64>,
     receiver: Receiver<u64>,
     stop: bool,
 }
 
-impl<T: Trigger> Scheduler<T> {
+impl Scheduler {
     pub fn new() -> Self {
-        let queue = PriorityQueue::<String, u64>::new();
-        let triggers = HashMap::<String, T>::new();
+        let queue = PriorityQueue::<String, Reverse<u64>>::new();
+        let triggers = HashMap::<String, Box<dyn Trigger>>::new();
         let (sender, receiver) = async_channel::bounded::<u64>(128);
         Self {
             triggers,
@@ -83,11 +84,12 @@ impl<T: Trigger> Scheduler<T> {
         }
     }
 
-    pub fn add_job(&mut self, job: T) {
-        let next_firetime = job.get_next(Utc::now().timestamp() as u64);
+    pub fn add_job(&mut self, job: Box<dyn Trigger>) {
+        let next_firetime = job.get_next(Utc::now().timestamp_millis() as u64);
+
         let id = job.get_id();
         self.triggers.insert(id.clone(), job);
-        self.queue.push(id, next_firetime);
+        self.queue.push(id, Reverse(next_firetime));
     }
 
     pub fn remove_job(&mut self, id: String) {
@@ -107,20 +109,24 @@ impl<T: Trigger> Scheduler<T> {
 
             let t = self.queue.pop();
 
-            let sleep_interval = Duration::from_millis(500);
+            let mut sleep_interval = Duration::from_millis(500);
 
             match t {
                 Some(job) => {
                     let job_id = job.0;
                     let last_fire_time = job.1;
-                    _ = self.sender.send(last_fire_time).await;
+                    _ = self.sender.send(last_fire_time.0).await;
 
                     let trigger_opt = self.triggers.get(&job_id);
 
                     match trigger_opt {
                         Some(tigger) => {
-                            let next_firetime = tigger.get_next(last_fire_time);
-                            self.queue.push(job_id, next_firetime);
+                            let next_firetime = tigger.get_next(last_fire_time.0);
+                            self.queue.push(job_id, Reverse(next_firetime));
+
+                            if let Some(item) = self.queue.peek() {
+                                sleep_interval = Duration::from_millis(item.1 .0 - last_fire_time.0)
+                            }
                         }
                         None => {}
                     }
@@ -128,7 +134,7 @@ impl<T: Trigger> Scheduler<T> {
                 None => {}
             }
 
-            sleep(sleep_interval).await;
+            sleep(sleep_interval).await
         }
     }
 
