@@ -117,15 +117,16 @@ impl Scheduler {
                     let last_fire_time = job.1;
                     _ = self.sender.send(last_fire_time.0).await;
 
+                    let now = Utc::now().timestamp_millis() as u64;
+
                     let trigger_opt = self.triggers.get(&job_id);
 
                     match trigger_opt {
                         Some(tigger) => {
                             let next_firetime = tigger.get_next(last_fire_time.0);
                             self.queue.push(job_id, Reverse(next_firetime));
-
                             if let Some(item) = self.queue.peek() {
-                                sleep_interval = Duration::from_millis(item.1 .0 - last_fire_time.0)
+                                sleep_interval = Duration::from_millis(item.1 .0 - now)
                             }
                         }
                         None => {}
