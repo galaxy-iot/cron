@@ -3,15 +3,16 @@ extern crate cron;
 use crate::cron::scheduler::{CronTrigger, EveryTrigger, Scheduler};
 use chrono::Utc;
 use tokio;
+use std::sync::Arc;
 
 #[tokio::main]
 async fn main() {
     let mut scheduler = Scheduler::new();
     let every_trigger = EveryTrigger::new(std::time::Duration::from_secs(1), String::from("id"));
-    scheduler.add_job(Box::new(every_trigger));
+    scheduler.add_job(Arc::new(every_trigger));
 
-    let cron_trigger = CronTrigger::new(String::from("id1"), "* * * * * ? *").unwrap();
-    scheduler.add_job(Box::new(cron_trigger));
+    let cron_trigger = CronTrigger::new(String::from("id1"), "* 1/1 * * * ? *").unwrap();
+    scheduler.add_job(Arc::new(cron_trigger));
 
     let receiver = scheduler.get_receiver();
 

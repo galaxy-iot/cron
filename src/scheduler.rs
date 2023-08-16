@@ -1,4 +1,5 @@
 use crate::parse::CronParseError;
+use std::sync::Arc;
 use crate::Cron;
 use async_channel::{Receiver, Sender};
 use chrono::{DateTime, NaiveDateTime, Utc};
@@ -63,7 +64,7 @@ impl Trigger for CronTrigger {
 }
 
 pub struct Scheduler {
-    triggers: HashMap<String, Box<dyn Trigger>>,
+    triggers: HashMap<String, Arc<dyn Trigger>>,
     queue: PriorityQueue<String, Reverse<u64>>,
     sender: Sender<u64>,
     receiver: Receiver<u64>,
@@ -73,7 +74,7 @@ pub struct Scheduler {
 impl Scheduler {
     pub fn new() -> Self {
         let queue = PriorityQueue::<String, Reverse<u64>>::new();
-        let triggers = HashMap::<String, Box<dyn Trigger>>::new();
+        let triggers = HashMap::<String, Arc<dyn Trigger>>::new();
         let (sender, receiver) = async_channel::bounded::<u64>(128);
         Self {
             triggers,
@@ -84,7 +85,7 @@ impl Scheduler {
         }
     }
 
-    pub fn add_job(&mut self, job: Box<dyn Trigger>) {
+    pub fn add_job(&mut self, job: Arc<dyn Trigger>) {
         let next_firetime = job.get_next(Utc::now().timestamp_millis() as u64);
 
         let id = job.get_id();

@@ -15,6 +15,10 @@ std = []
 name = "scheduler"
 path = "examples/scheduler.rs"
 
+[[example]]
+name = "cron"
+path = "examples/cron.rs"
+
 [dependencies]
 chrono = "0.4.24"
 nom = "7.1.3"
