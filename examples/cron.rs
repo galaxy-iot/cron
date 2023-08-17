@@ -2,7 +2,6 @@ mod scheduler;
 
 extern crate cron;
 
-use crate::cron::parse::CronExpr;
 use crate::cron::Cron;
 use chrono::Utc;
 
