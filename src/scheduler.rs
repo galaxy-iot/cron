@@ -62,6 +62,7 @@ impl Trigger for CronTrigger {
     }
 }
 
+#[derive(Clone)]
 pub struct Scheduler {
     triggers: Arc<Mutex<HashMap<String, Arc<dyn Trigger>>>>,
     queue: Arc<Mutex<PriorityQueue<String, Reverse<u64>>>>,
