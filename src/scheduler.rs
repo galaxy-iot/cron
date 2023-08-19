@@ -8,7 +8,7 @@ use std::sync::{Arc, Mutex};
 use tokio::time::Duration;
 
 pub trait Trigger: Send + Sync {
-    fn get_next(&self, from: u64) -> u64;
+    fn get_next(&self, from: i64) -> i64;
     fn get_id(&self) -> String;
 }
 
@@ -24,8 +24,8 @@ impl EveryTrigger {
 }
 
 impl Trigger for EveryTrigger {
-    fn get_next(&self, from: u64) -> u64 {
-        self.interval.as_millis() as u64 + from
+    fn get_next(&self, from: i64) -> i64 {
+        self.interval.as_millis() as i64 + from
     }
 
     fn get_id(&self) -> String {
@@ -50,11 +50,11 @@ impl CronTrigger {
 }
 
 impl Trigger for CronTrigger {
-    fn get_next(&self, from: u64) -> u64 {
+    fn get_next(&self, from: i64) -> i64 {
         let naive = NaiveDateTime::from_timestamp_millis(from as i64).unwrap();
         let datetime: DateTime<Utc> = DateTime::from_utc(naive, Utc);
         let next = self.cron.next_after(datetime).unwrap();
-        next.timestamp_millis() as u64
+        next.timestamp_millis() as i64
     }
 
     fn get_id(&self) -> String {
@@ -65,12 +65,12 @@ impl Trigger for CronTrigger {
 #[derive(Clone)]
 pub struct Scheduler {
     triggers: Arc<Mutex<HashMap<String, Arc<dyn Trigger>>>>,
-    queue: Arc<Mutex<PriorityQueue<String, Reverse<u64>>>>,
+    queue: Arc<Mutex<PriorityQueue<String, Reverse<i64>>>>,
 }
 
 impl Scheduler {
     pub fn new() -> Self {
-        let queue = PriorityQueue::<String, Reverse<u64>>::new();
+        let queue = PriorityQueue::<String, Reverse<i64>>::new();
         let triggers = HashMap::<String, Arc<dyn Trigger>>::new();
         Self {
             triggers: Arc::new(Mutex::new(triggers)),
@@ -79,7 +79,7 @@ impl Scheduler {
     }
 
     pub fn add_job(&mut self, job: Arc<dyn Trigger>) {
-        let next_firetime = job.get_next(Utc::now().timestamp_millis() as u64);
+        let next_firetime = job.get_next(Utc::now().timestamp_millis() as i64);
         let id = job.get_id();
 
         let mut trigger = self.triggers.lock().unwrap();
@@ -96,7 +96,7 @@ impl Scheduler {
         trigger.remove(&id);
     }
 
-    pub fn get_next_firetime(&mut self) -> Option<u64> {
+    pub fn get_next_firetime(&mut self) -> Option<i64> {
         let trigger = self.triggers.lock().unwrap();
         let mut queue = self.queue.lock().unwrap();
 

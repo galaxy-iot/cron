@@ -18,7 +18,7 @@ async fn main() {
         let cron_trigger = CronTrigger::new(String::from("id1"), "* 1/1 * * * ? *").unwrap();
         scheduler.add_job(Arc::new(cron_trigger));
 
-        let (tx, rx) = async_channel::bounded::<u64>(1024);
+        let (tx, rx) = async_channel::bounded::<i64>(1024);
 
         tokio::spawn(async move {
             loop {
@@ -28,13 +28,13 @@ async fn main() {
         });
 
         loop {
-            let now = Utc::now().timestamp_millis() as u64;
+            let now = Utc::now().timestamp_millis();
             let next_firetime = scheduler.get_next_firetime().unwrap();
 
             if now >= next_firetime {
                 let _ = tx.send(next_firetime).await;
             } else {
-                tokio::time::sleep(time::Duration::from_millis(next_firetime - now)).await;
+                tokio::time::sleep(time::Duration::from_millis((next_firetime - now) as u64)).await;
                 let _ = tx.send(next_firetime).await;
             }
         }
