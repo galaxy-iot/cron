@@ -79,13 +79,22 @@ impl Scheduler {
     }
 
     pub fn add_job(&mut self, job: Arc<dyn Trigger>) {
-        let next_firetime = job.get_next(Utc::now().timestamp_millis() as i64);
+        let last_firetime = job.get_next(Utc::now().timestamp_millis() as i64);
         let id = job.get_id();
 
         let mut trigger = self.triggers.lock().unwrap();
         let mut queue = self.queue.lock().unwrap();
         trigger.insert(id.clone(), job);
-        queue.push(id, Reverse(next_firetime));
+        queue.push(id, Reverse(last_firetime));
+    }
+
+    pub fn add_job_with_previous_time(&mut self, job: Arc<dyn Trigger>, last_firetime: i64) {
+        let id = job.get_id();
+
+        let mut trigger = self.triggers.lock().unwrap();
+        let mut queue = self.queue.lock().unwrap();
+        trigger.insert(id.clone(), job);
+        queue.push(id, Reverse(last_firetime));
     }
 
     pub fn remove_job(&mut self, id: String) {
